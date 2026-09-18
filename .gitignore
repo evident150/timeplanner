@@ -1,0 +1,14 @@
+# 构建 / 临时产物（release.ps1 会重新生成）
+work/
+TimePlanner/work/
+TimePlanner/dist/
+outputs/TimePlanner-*/
+outputs/*.zip
+
+# 系统与编辑器
+Thumbs.db
+desktop.ini
+*.log
+*.user
+outputs/README.md
+
