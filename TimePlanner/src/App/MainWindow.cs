@@ -34,6 +34,8 @@ namespace TimePlanner.App
         bool animating;
         string lastSignature = "";
         internal HintBox AddBox;
+        string paintedPage = "";                                                    // 当前真正显示在 contentHost 里的页面
+        readonly Dictionary<string, double> scrollMemo = new Dictionary<string, double>();   // 每个页面各记各的滚动位置
 
         public MainWindow(Store store, bool startHidden)
         {
@@ -402,6 +404,7 @@ namespace TimePlanner.App
             bool addFocused = AddBox != null && AddBox.Box.IsKeyboardFocusWithin;
             PaintNav();
             PaintSideFoot();
+            RememberScroll();
 
             UIElement body;
             if (Page == "week") { WeekAnchor = TaskQuery.WeekStart(WeekAnchor, Store.Settings.WeekStartMonday); body = BuildWeekPage(); }
@@ -409,8 +412,36 @@ namespace TimePlanner.App
             else if (Page == "settings") body = BuildSettingsPage();
             else body = BuildTodayPage();
             contentHost.Child = body;
+            paintedPage = Page;
+            RestoreScroll(body);
 
             if (addFocused && AddBox != null) AddBox.FocusInput();
+        }
+
+        /// <summary>重建页面前记住滚动位置（拖动任务改期、勾选完成后页面不该跳回顶部）。</summary>
+        void RememberScroll()
+        {
+            if (contentHost == null || paintedPage.Length == 0) return;
+            ScrollViewer sv = Ui.Find<ScrollViewer>(contentHost);
+            if (sv != null) scrollMemo[paintedPage] = sv.VerticalOffset;
+        }
+
+        /// <summary>把新页面的滚动条放回上次的位置；每页各记各的，切换页面时回到该页自己的位置。</summary>
+        void RestoreScroll(UIElement body)
+        {
+            if (body == null) return;
+            double want;
+            if (!scrollMemo.TryGetValue(Page, out want) || want <= 0.5) return;
+            ScrollViewer sv = Ui.Find<ScrollViewer>(body);
+            if (sv == null) return;
+            ScrollViewer target = sv;
+            target.UpdateLayout();
+            target.ScrollToVerticalOffset(want);
+            // 内容测量完成后才能滚到正确位置，所以在布局之后再补一次
+            Dispatcher.BeginInvoke(DispatcherPriority.Loaded, new Action(delegate()
+            {
+                if (target.VerticalOffset != want) target.ScrollToVerticalOffset(want);
+            }));
         }
 
         void PaintNav()
