@@ -25,7 +25,7 @@ function Find-Ref([string]$name) {
 }
 
 $refNames = @("System", "System.Core", "System.Xml", "System.Drawing", "System.Runtime.Serialization",
-              "System.Windows.Forms", "PresentationCore", "PresentationFramework",
+              "PresentationCore", "PresentationFramework",
               "WindowsBase", "System.Xaml")
 $refArgs = @()
 foreach ($n in $refNames) { $refArgs += "/r:" + (Find-Ref $n) }

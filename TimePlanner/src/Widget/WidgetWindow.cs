@@ -39,6 +39,7 @@ namespace TimePlanner.Widget
 
         DispatcherTimer rebuild;
         DispatcherTimer fullscreenTimer;
+        DispatcherTimer trimTimer;
         bool animating;
         bool hiddenByFullscreen;
         string lastSignature = "";
@@ -86,6 +87,7 @@ namespace TimePlanner.Widget
             ApplySettings();
             Refresh();
             StartFullscreenWatch();
+            StartIdleTrim();
             Loaded += delegate(object s, RoutedEventArgs e)
             {
                 if (!RenderMode) DesktopInterop.MakeToolWindow(this);
@@ -514,6 +516,26 @@ namespace TimePlanner.Widget
             fullscreenTimer.Start();
         }
 
+        /// <summary>
+        /// 闲着的时候把工作集还给系统。桌面插件一天里绝大多数时间只是摆在那儿，
+        /// 没必要一直占着几十 MB 物理内存；要用到时系统按需调回来，都是文件页，不会丢数据。
+        /// </summary>
+        void StartIdleTrim()
+        {
+            if (RenderMode) return;
+            trimTimer = new DispatcherTimer();
+            trimTimer.Interval = TimeSpan.FromSeconds(12);
+            trimTimer.Tick += delegate(object s, EventArgs e)
+            {
+                // 正在交互（拖动缩放、勾选、放烟火）时不动它，免得那一下发涩
+                // 指针在插件上、正在拖动缩放、正在放烟火的时候都不动它，免得那一下发涩
+                if (!IsLoaded || resizing || animating || IsMouseOver) return;
+                if (fx != null && fx.Children.Count > 0) return;
+                DesktopInterop.TrimWorkingSet();
+            };
+            trimTimer.Start();
+        }
+
         /// <summary>全屏时把自己藏起来：既避免和全屏画面抢合成导致游戏掉帧，也不打扰观看。</summary>
         void CheckFullscreen()
         {
@@ -524,6 +546,7 @@ namespace TimePlanner.Widget
             if (pause)
             {
                 DesktopInterop.SetVisible(this, false);
+                DesktopInterop.TrimWorkingSet();
                 Diagnostics.Log("全屏适配", "检测到全屏程序，桌面插件已暂时隐藏");
             }
             else

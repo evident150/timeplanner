@@ -215,5 +215,20 @@ namespace TimePlanner.Core
             }
             catch (Exception) { }
         }
+
+        [DllImport("psapi.dll")]
+        static extern bool EmptyWorkingSet(IntPtr process);
+        [DllImport("kernel32.dll")]
+        static extern IntPtr GetCurrentProcess();
+
+        /// <summary>
+        /// 把工作集（真正占着物理内存的那部分）交还一部分给系统。
+        /// 托盘里的主程序和桌面挂件大部分时间什么都不做，没必要一直占着这些页；
+        /// 之后要用到时系统会按需调回来，代价只是那一下略慢（都是文件页，不会丢数据）。
+        /// </summary>
+        public static void TrimWorkingSet()
+        {
+            try { EmptyWorkingSet(GetCurrentProcess()); } catch (Exception) { }
+        }
     }
 }

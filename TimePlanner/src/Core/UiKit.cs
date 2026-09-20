@@ -8,6 +8,7 @@ using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Media.Effects;
 using System.Windows.Shapes;
+using System.Windows.Threading;
 
 namespace TimePlanner.Core
 {
@@ -247,7 +248,34 @@ namespace TimePlanner.Core
             sv.PanningMode = PanningMode.VerticalOnly;
             sv.Content = child;
             sv.Resources[typeof(ScrollBar)] = ScrollStyle();
+            DragAutoScroll(sv);
             return sv;
+        }
+
+        /// <summary>拖动任务经过滚动区域上下边缘时自动滚动（详见 DragScroller）。</summary>
+        public static void DragAutoScroll(ScrollViewer sv)
+        {
+            new DragScroller(sv);
+        }
+
+        /// <summary>鼠标停在 y 处时每个 tick 该滚多少像素（越靠边越快，中间为 0）。</summary>
+        public static double SpeedAt(ScrollViewer sv, double y)
+        {
+            double h = sv.ActualHeight;
+            if (h < 40) return 0;
+            double edge = Math.Min(96, Math.Max(44, h * 0.2));
+            double max = 30;
+            if (y < edge) return -max * Ramp((edge - y) / edge);
+            if (y > h - edge) return max * Ramp((y - (h - edge)) / edge);
+            return 0;
+        }
+
+        /// <summary>把 0..1 之外的数夹回去（拖到窗口外面时 y 会是个很大的数）。</summary>
+        static double Ramp(double f)
+        {
+            if (f < 0) return 0;
+            if (f > 1) return 1;
+            return f;
         }
 
         static Style _scrollStyle;
@@ -297,6 +325,81 @@ namespace TimePlanner.Core
             a.EasingFunction = new CubicEase();
             ((CubicEase)a.EasingFunction).EasingMode = EasingMode.EaseOut;
             el.BeginAnimation(UIElement.OpacityProperty, a);
+        }
+    }
+
+    /// <summary>
+    /// 拖动时贴着滚动区域上下边缘就自动翻页。
+    /// 拖拽期间鼠标被 DoDragDrop 的模态循环接管，滚轮和滚动条都不好使，
+    /// 不补这一段就永远拖不到屏幕外的日期。
+    /// </summary>
+    public class DragScroller
+    {
+        readonly ScrollViewer sv;
+        readonly DispatcherTimer timer;
+        double speed;                       // 每个 tick 滚多少像素，正数往下
+        double seen = double.NaN;           // 上一次 tick 看到的偏移
+        int stuck;                          // 连着几次没动过
+        DateTime lastOver = DateTime.MinValue;
+
+        public DragScroller(ScrollViewer sv)
+        {
+            this.sv = sv;
+            // 光标走在卡片之间的空隙上时，也是这个滚动区域收拖拽消息，先把自己变成投放目标
+            sv.AllowDrop = true;
+
+            timer = new DispatcherTimer(DispatcherPriority.Normal);
+            timer.Interval = TimeSpan.FromMilliseconds(28);
+            timer.Tick += delegate(object s, EventArgs e) { Step(); };
+
+            // 用 Preview 事件：日期卡片自己的 DragOver 会把事件标成已处理，冒泡上来的就没得听了
+            sv.AddHandler(DragDrop.PreviewDragOverEvent, new DragEventHandler(delegate(object s, DragEventArgs e)
+            {
+                PointAt(e.GetPosition(sv).Y);
+            }), true);
+
+            sv.AddHandler(DragDrop.PreviewDropEvent, new DragEventHandler(delegate(object s, DragEventArgs e) { Stop(); }), true);
+        }
+
+        /// <summary>拖拽光标现在停在滚动区域的 y 处。</summary>
+        public void PointAt(double y)
+        {
+            lastOver = DateTime.Now;
+            speed = Ui.SpeedAt(sv, y);
+            if (speed == 0) Stop();
+            else if (!timer.IsEnabled) { stuck = 0; seen = double.NaN; timer.Start(); }
+        }
+
+        /// <summary>结束拖拽（放下或者拖出窗口）。</summary>
+        public void Stop()
+        {
+            speed = 0;
+            stuck = 0;
+            seen = double.NaN;
+            timer.Stop();
+        }
+
+        /// <summary>定时器还在跑吗（正在自动滚动）。</summary>
+        public bool Running { get { return timer.IsEnabled; } }
+
+        /// <summary>滚一帧。</summary>
+        public void Step()
+        {
+            // 一秒没收到拖拽消息就当拖拽已经结束：DoDragDrop 抛异常时收不到 Drop
+            if (speed == 0 || (DateTime.Now - lastOver).TotalMilliseconds > 1000) { Stop(); return; }
+
+            double now = sv.VerticalOffset;
+            // ScrollToVerticalOffset 要等下一趟布局才反映到 VerticalOffset 上，
+            // 所以“到底了没”只能跟上一次 tick 的值比；跟刚设下去的值比，第一帧就会误判成到底然后停表。
+            if (!double.IsNaN(seen) && Math.Abs(now - seen) < 0.5)
+            {
+                stuck++;
+                if (stuck >= 2) { Stop(); return; }     // 连着两帧没动，确实到顶/到底了
+            }
+            else stuck = 0;
+
+            seen = now;
+            sv.ScrollToVerticalOffset(now + speed);
         }
     }
 }

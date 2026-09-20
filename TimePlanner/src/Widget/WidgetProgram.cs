@@ -3,6 +3,7 @@ using System.IO;
 using System.Threading;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Interop;
 using System.Windows.Media;
 using TimePlanner.Core;
 
@@ -13,6 +14,10 @@ namespace TimePlanner.Widget
         [STAThread]
         public static void Main(string[] args)
         {
+            // 桌面插件只是一块静态小面板，GPU 那套（d3d9 / D3DCompiler / 显卡驱动）常驻要几十 MB。
+            // 软件渲染对它够用，省下的内存比掉的那点性能划算。
+            RenderOptions.ProcessRenderMode = RenderMode.SoftwareOnly;
+
             string dir = ArgValue(args, "--render");
             if (dir != null)
             {

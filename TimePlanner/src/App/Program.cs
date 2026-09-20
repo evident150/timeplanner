@@ -2,7 +2,7 @@
 using System.Diagnostics;
 using System.Threading;
 using System.Windows;
-using WF = System.Windows.Forms;
+using System.Windows.Controls;
 using TimePlanner.Core;
 
 namespace TimePlanner.App
@@ -59,6 +59,7 @@ namespace TimePlanner.App
             if (trayOnly) window.Hide();
 
             tray = new TrayIcon(store, window, delegate() { ShowMain(); }, delegate(bool all) { Exit(all); });
+            ScheduleTrim();
             store.Changed += OnStoreChanged;
             lastWidgetVisible = store.Settings.WidgetVisible;
             WidgetLauncher.Sync(lastWidgetVisible);
@@ -80,6 +81,23 @@ namespace TimePlanner.App
                 lastWidgetVisible = store.Settings.WidgetVisible;
                 WidgetLauncher.Sync(lastWidgetVisible);
             }
+        }
+
+        /// <summary>
+        /// 主程序大部分时间缩在托盘里，只在没露脸的时候定时把工作集还给系统。
+        /// 窗口开着的时候不动它——那是用户正在看的界面，收了也会马上再调回来。
+        /// </summary>
+        static void ScheduleTrim()
+        {
+            System.Windows.Threading.DispatcherTimer t = new System.Windows.Threading.DispatcherTimer();
+            t.Interval = TimeSpan.FromSeconds(20);
+            t.Tick += delegate(object s, EventArgs e)
+            {
+                bool idle = window == null || !window.IsVisible || window.WindowState == WindowState.Minimized;
+                if (!idle) return;
+                DesktopInterop.TrimWorkingSet();
+            };
+            t.Start();
         }
 
         static void ShowMain()
@@ -137,64 +155,68 @@ namespace TimePlanner.App
         }
     }
 
-    /// <summary>托盘图标与菜单。</summary>
+    /// <summary>托盘图标与菜单：Win32 Shell_NotifyIcon + 自绘深色菜单，不再把 WinForms 拖进进程。</summary>
     public class TrayIcon : IDisposable
     {
-        readonly WF.NotifyIcon ni;
-        readonly WF.ToolStripMenuItem widgetItem;
+        readonly NativeTray ni;
         readonly Store store;
-        readonly MainWindow window;
+        readonly Action showMain;
+        readonly Action<bool> exit;
         bool balloonShown;
 
         public TrayIcon(Store store, MainWindow window, Action showMain, Action<bool> exit)
         {
             this.store = store;
-            this.window = window;
+            this.showMain = showMain;
+            this.exit = exit;
 
-            ni = new WF.NotifyIcon();
-            ni.Icon = AppIcon.Tray();
-            ni.Text = "时间规划 · 今日计划与桌面插件";
-            ni.Visible = true;
-            ni.DoubleClick += delegate(object s, EventArgs e) { showMain(); };
-
-            WF.ContextMenuStrip menu = new WF.ContextMenuStrip();
-            menu.ShowImageMargin = false;
-            menu.Items.Add("打开主程序", null, delegate(object s, EventArgs e) { showMain(); });
-            widgetItem = new WF.ToolStripMenuItem("显示桌面插件");
-            widgetItem.CheckOnClick = false;
-            widgetItem.Click += delegate(object s, EventArgs e)
-            {
-                store.UpdateSettings(delegate(Settings st) { st.WidgetVisible = !st.WidgetVisible; });
-            };
-            menu.Items.Add(widgetItem);
-            menu.Items.Add(new WF.ToolStripSeparator());
-            menu.Items.Add("立即同步数据", null, delegate(object s, EventArgs e) { store.Reload(); });
-            menu.Items.Add("打开数据文件夹", null, delegate(object s, EventArgs e)
-            {
-                try { Process.Start("explorer.exe", "\"" + TimePlanner.Core.Store.DataDir + "\""); } catch (Exception) { }
-            });
-            menu.Items.Add(new WF.ToolStripSeparator());
-            menu.Items.Add("退出主程序（保留桌面插件）", null, delegate(object s, EventArgs e) { exit(false); });
-            menu.Items.Add("全部退出", null, delegate(object s, EventArgs e) { exit(true); });
-            ni.ContextMenuStrip = menu;
+            ni = new NativeTray(AppIcon.Tray().Handle, "时间规划 · 今日计划与桌面插件", 1);
+            ni.DoubleClick += delegate() { showMain(); };
+            ni.RightClick += delegate() { OpenMenu(); };
 
             Sync();
         }
 
         public void Sync()
         {
-            bool on = store.Settings.WidgetVisible;
-            widgetItem.Checked = on;
-            widgetItem.Text = on ? "隐藏桌面插件" : "显示桌面插件";
             ni.Text = string.Format("时间规划 · 今日 {0}", Summary());
+        }
+
+        void OpenMenu()
+        {
+            ContextMenu menu = BuildMenu(store, showMain, exit);
+            menu.Placement = System.Windows.Controls.Primitives.PlacementMode.MousePoint;
+            menu.IsOpen = true;
+        }
+
+        /// <summary>托盘右键菜单（离屏预览也用这一份，保证截图和真正弹出来的完全一致）。</summary>
+        public static ContextMenu BuildMenu(Store store, Action showMain, Action<bool> exit)
+        {
+            ContextMenu menu = MenuSkin.Create();
+            MenuSkin.Add(menu, "list", "打开主程序", delegate() { showMain(); }, false, false);
+            bool on = store.Settings.WidgetVisible;
+            MenuSkin.Add(menu, "desktop", on ? "隐藏桌面插件" : "显示桌面插件", delegate()
+            {
+                store.UpdateSettings(delegate(Settings st) { st.WidgetVisible = !st.WidgetVisible; });
+            }, on, false);
+            MenuSkin.Line(menu);
+            MenuSkin.Add(menu, "refresh", "立即同步数据", delegate() { store.Reload(); }, false, false);
+            MenuSkin.Add(menu, "expand", "打开数据文件夹", delegate()
+            {
+                try { Process.Start("explorer.exe", "\"" + Store.DataDir + "\""); } catch (Exception) { }
+            }, false, false);
+            MenuSkin.Line(menu);
+            MenuSkin.Add(menu, "close", "退出主程序（保留桌面插件）", delegate() { exit(false); }, false, false);
+            MenuSkin.Add(menu, "close", "全部退出", delegate() { exit(true); }, false, true);
+            return menu;
         }
 
         public void NotifyHidden()
         {
             if (balloonShown) return;
             balloonShown = true;
-            try { ni.ShowBalloonTip(2600, "时间规划仍在运行", "程序已最小化到托盘，双击图标可以重新打开。", WF.ToolTipIcon.Info); }
-            catch (Exception) { }
+            try { ni.Balloon("时间规划仍在运行", "程序已最小化到托盘，双击图标可以重新打开。"); } catch (Exception) { }
+            DesktopInterop.TrimWorkingSet();     // 已经缩进托盘了，驻留内存还给系统
         }
 
         string Summary()
@@ -207,7 +229,7 @@ namespace TimePlanner.App
 
         public void Dispose()
         {
-            try { ni.Visible = false; ni.Dispose(); } catch (Exception) { }
+            try { ni.Dispose(); } catch (Exception) { }
         }
     }
 
