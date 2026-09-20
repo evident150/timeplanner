@@ -160,6 +160,8 @@ powershell -ExecutionPolicy Bypass -File release.ps1 -DryRun         # 只打印
 5. 刷新仓库根目录的 [`exe/`](../exe/)：把两个 exe + `使用说明.txt` + `启动时间规划.cmd` 拷过去，这就是提交进 git 的**免编译包**（GitHub 上直接下载就能跑，不用编译）。
 6. **自动删除 `outputs/` 里其它版本的目录和压缩包**——只认「`outputs` 正下方、名字是 `TimePlanner-<数字版本>`」的目录和 `TimePlanner-<数字版本>-*.zip`，`screenshots/`、`README.md` 不碰；不确定时先跑 `-DryRun` 看一眼。
 
+发完版再去 GitHub 上建一条[发行版](https://github.com/evident150/timeplanner/releases)：网页右下角「创建发行版」→ 选刚推上去的 tag → 标题写「<版本> 特别版」→ 把 `outputs\TimePlanner-<版本>-app.zip` 拖进附件区 → 发布（`exe/` 目录已经跟着提交上去了，两边内容一致）。
+
 发版时记得手写的是「更新说明」：把 `dist/使用说明.txt` 里的「本版更新（旧版本）」改成「上一版（旧版本）」，再在上面补一段新的（标题里的版本号由脚本自动改）。
 
 ---

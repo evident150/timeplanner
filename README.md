@@ -6,7 +6,12 @@ Windows 桌面上的时间规划小工具：一个**主程序**用来规划今�
 
 ## 不想编译？直接下 exe
 
-仓库里的 [`exe/`](exe/) 目录就是**当前版本的免编译包**（每次发版由 `release.ps1` 自动刷新），下这一份就能跑：
+两条路，都不用编译：
+
+- **发行版（Releases）**：[`1.7 特别版`](https://github.com/evident150/timeplanner/releases/latest) 里直接下 `TimePlanner-1.7-app.zip`，解压双击就能用；历史上每一版（含 [`1.5 经典版`](https://github.com/evident150/timeplanner/releases/tag/v1.5)）都在[发行版列表](https://github.com/evident150/timeplanner/releases)里
+- **仓库里的 [`exe/`](exe/) 目录**：**当前版本**的免编译包（每次发版由 `release.ps1` 自动刷新），点进去单独下两个 exe 也行
+
+`exe/` 里是这些：
 
 - `TimePlanner.exe` — 主程序（规划今日与本周）
 - `TimePlanner.Widget.exe` — 桌面挂件
@@ -46,7 +51,8 @@ Windows 桌面上的时间规划小工具：一个**主程序**用来规划今�
 | `v1.6` | 1.6 | 圣旨特别版：整套界面换成圣旨皮肤，插件左下角小人开口说话 |
 | `v1.5` | 1.5 | 经典版：上一代的深色界面，没有圣旨皮肤和小人 |
 
-按标签下载就能拿到对应那一版的源码快照（GitHub 上 `Code → Download ZIP` 只给主线最新版）——想看旧界面就下 `v1.5`。
+每个版本在 [发行版](https://github.com/evident150/timeplanner/releases) 里都有一条：`v1.7` 带免编译附件，`v1.5` 带 `TimePlanner-1.5-classic.zip`（解压即用），`v1.6` 只带源码。想看旧界面就下 `v1.5`。
+按标签下载也能拿到源码快照（GitHub 上 `Code → Download ZIP` 只给主线最新版）。
 
 ## 从源码构建
 
