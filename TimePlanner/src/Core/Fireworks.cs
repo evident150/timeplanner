@@ -17,17 +17,37 @@ namespace TimePlanner.Core
     {
         static readonly Random Rnd = new Random();
 
-        /// <summary>完成一条任务时随机挑一句鼓励的话。</summary>
+        /// <summary>完成一条任务时，左下角小人替圣上挑一句贺辞。</summary>
         public static readonly string[] Cheers = new string[]
         {
-            "干得漂亮！", "又搞定一项 ✨", "漂亮，继续保持", "效率在线 👏", "拿下！",
-            "稳稳的，加油", "太棒了，接着来", "这波很利索", "进度条又长了一点", "给你点个赞 👍"
+            "办得漂亮，朕心甚慰", "此事既了，甚合朕意", "卿甚合朕意", "好，朕准了",
+            "爱卿辛苦，朕记你一功", "又了一桩心事", "如此勤勉，朕放心", "好好好，就这么办",
+            "朕看好你", "事无大小，办妥便佳"
         };
 
-        /// <summary>当天任务全部完成时用的话。</summary>
-        public const string AllDone = "今天的任务全部完成，太棒了！";
+        /// <summary>当天任务全部完成时，小人说的是这句。</summary>
+        public const string AllDone = "今日诸事皆了，朕心大悦";
+
+        /// <summary>没事的时候小人挂在嘴边的一句。</summary>
+        public const string Silent = "朕在此候着";
+
+        /// <summary>贺辞的落款。</summary>
+        public const string CheerSign = "—— 钦 此";
 
         static Geometry _ribbon;
+        static Geometry _tail;
+
+        /// <summary>对话框左侧那条指着人的小尾巴（给窗体的对话框共用）。</summary>
+        public static Geometry Tail()
+        {
+            if (_tail == null)
+            {
+                Geometry g = Geometry.Parse("M0,8 L11,0 L11,16 Z");
+                g.Freeze();
+                _tail = g;
+            }
+            return _tail;
+        }
 
         static Geometry Ribbon()
         {
@@ -259,12 +279,42 @@ namespace TimePlanner.Core
             ScheduleCleanup(layer, made, life + 160);
         }
 
-        /// <summary>飘一句鼓励的话：弹出 + 轻微上浮，最后淡出。返回它的总时长。</summary>
+        /// <summary>飘一句贺辞：宣纸小笺从勾选框旁边弹出来、轻轻上浮，最后淡出。返回它的总时长。</summary>
         static int CheerPill(Canvas layer, Point origin, string text, List<UIElement> made)
         {
-            Border pill = Ui.Round(10, Theme.B("#1B2230"), Theme.B(Theme.Alpha(Theme.Accent, 0.65)), 1);
-            pill.Padding = new Thickness(13, 7, 14, 8);
-            pill.Child = Ui.Txt(text, 14.5, Theme.B(Colors.White), true);
+            Grid pill = new Grid();
+            ColumnDefinition tailCol = new ColumnDefinition();
+            tailCol.Width = new GridLength(11);
+            pill.ColumnDefinitions.Add(tailCol);
+            pill.ColumnDefinitions.Add(new ColumnDefinition());
+
+            Path tail = new Path();
+            tail.Data = Tail();
+            tail.Stretch = Stretch.Fill;
+            tail.Width = 11;
+            tail.Height = 16;
+            tail.Fill = Theme.B(Theme.Ivory);
+            tail.Stroke = Theme.B(Theme.IvoryLine);
+            tail.StrokeThickness = 1.1;
+            tail.VerticalAlignment = VerticalAlignment.Center;
+            tail.Margin = new Thickness(0, 7, 0, 0);
+            pill.Children.Add(tail);
+
+            Border note = Ui.Round(8, Theme.B(Theme.Ivory), Theme.B(Theme.IvoryLine), 1.3);
+            note.Padding = new Thickness(12, 7, 13, 8);
+            StackPanel lines = new StackPanel();
+            TextBlock main = Ui.Txt(text, 14.5, Theme.B(Theme.IvoryInk), true);
+            main.FontFamily = Theme.FontTitle;
+            main.TextWrapping = TextWrapping.Wrap;
+            lines.Children.Add(main);
+            TextBlock sign = Ui.Txt(CheerSign, 10.5, Theme.B(Theme.TextFaint), false);
+            sign.HorizontalAlignment = HorizontalAlignment.Right;
+            sign.Margin = new Thickness(0, 3, 0, 0);
+            lines.Children.Add(sign);
+            note.Child = lines;
+            Grid.SetColumn(note, 1);
+            pill.Children.Add(note);
+
             pill.IsHitTestVisible = false;
             pill.RenderTransformOrigin = new Point(0.5, 0.5);
             pill.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));

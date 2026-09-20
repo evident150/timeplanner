@@ -319,6 +319,140 @@ namespace TimePlanner.Core
             return e;
         }
 
+        static Brush _silk;
+        static Brush _wood;
+
+        /// <summary>明黄绢面：极淡的织纹平铺，几乎不占开销（缓存的 DrawingBrush）。</summary>
+        public static Brush Silk()
+        {
+            if (_silk == null)
+            {
+                DrawingGroup dg = new DrawingGroup();
+                dg.Children.Add(new GeometryDrawing(Theme.B(Theme.Silk), null, new RectangleGeometry(new Rect(0, 0, 8, 8))));
+                Pen pen = new Pen(Theme.B(Theme.Alpha(Theme.SilkEdge, 0.30)), 1);
+                pen.Freeze();
+                GeometryGroup gg = new GeometryGroup();
+                gg.Children.Add(new LineGeometry(new Point(0, 0.5), new Point(8, 0.5)));
+                gg.Children.Add(new LineGeometry(new Point(0, 4.5), new Point(8, 4.5)));
+                gg.Children.Add(new LineGeometry(new Point(0.5, 0), new Point(0.5, 8)));
+                gg.Children.Add(new LineGeometry(new Point(4.5, 0), new Point(4.5, 8)));
+                gg.Freeze();
+                dg.Children.Add(new GeometryDrawing(null, pen, gg));
+                dg.Freeze();
+                DrawingBrush db = new DrawingBrush(dg);
+                db.TileMode = TileMode.Tile;
+                db.Viewport = new Rect(0, 0, 8, 8);
+                db.ViewportUnits = BrushMappingMode.Absolute;
+                db.Stretch = Stretch.None;
+                db.Freeze();
+                _silk = db;
+            }
+            return _silk;
+        }
+
+        /// <summary>木牍：竖向渐变 + 淡木纹。</summary>
+        public static Brush Wood()
+        {
+            if (_wood == null)
+            {
+                LinearGradientBrush g = new LinearGradientBrush();
+                g.StartPoint = new Point(0, 0);
+                g.EndPoint = new Point(1, 0);
+                g.GradientStops.Add(new GradientStop(Theme.C("#452B18"), 0.00));
+                g.GradientStops.Add(new GradientStop(Theme.C("#3A2415"), 0.55));
+                g.GradientStops.Add(new GradientStop(Theme.C("#2E1C10"), 1.00));
+                g.Freeze();
+                _wood = g;
+            }
+            return _wood;
+        }
+
+        /// <summary>卷轴轴杆：中间亮、两头暗，看着像一根圆木鎏金。</summary>
+        public static Border Rod(double height)
+        {
+            Border b = new Border();
+            b.Height = height;
+            LinearGradientBrush g = new LinearGradientBrush();
+            g.StartPoint = new Point(0, 0);
+            g.EndPoint = new Point(0, 1);
+            g.GradientStops.Add(new GradientStop(Theme.C("#6E4E14"), 0.00));
+            g.GradientStops.Add(new GradientStop(Theme.C("#D9B45C"), 0.24));
+            g.GradientStops.Add(new GradientStop(Theme.C("#F9ECBE"), 0.46));
+            g.GradientStops.Add(new GradientStop(Theme.C("#C9A227"), 0.72));
+            g.GradientStops.Add(new GradientStop(Theme.C("#7A5612"), 1.00));
+            g.Freeze();
+            b.Background = g;
+            return b;
+        }
+
+        /// <summary>轴头：轴杆两端的小金帽。</summary>
+        public static Border RodCap(double w, double h)
+        {
+            Border b = new Border();
+            b.Width = w;
+            b.Height = h;
+            b.CornerRadius = new CornerRadius(3);
+            LinearGradientBrush g = new LinearGradientBrush();
+            g.StartPoint = new Point(0, 0);
+            g.EndPoint = new Point(0, 1);
+            g.GradientStops.Add(new GradientStop(Theme.C("#8A6416"), 0.00));
+            g.GradientStops.Add(new GradientStop(Theme.C("#F3DC9A"), 0.40));
+            g.GradientStops.Add(new GradientStop(Theme.C("#C9A227"), 0.68));
+            g.GradientStops.Add(new GradientStop(Theme.C("#5E4210"), 1.00));
+            g.Freeze();
+            b.Background = g;
+            b.BorderBrush = Theme.B(Theme.C("#6E4E14"));
+            b.BorderThickness = new Thickness(1);
+            return b;
+        }
+
+        /// <summary>朱印：竖排小字，微微歪一点，像真的盖上去的。</summary>
+        public static Border Seal(string text, double size, double angle)
+        {
+            Border b = new Border();
+            b.Width = size;
+            b.Height = size;
+            b.Background = Theme.B(Theme.Alpha(Theme.Seal, 0.90));
+            b.BorderBrush = Theme.B(Theme.Alpha(Theme.Seal, 1.0));
+            b.BorderThickness = new Thickness(2);
+            b.CornerRadius = new CornerRadius(3);
+            RotateTransform rt = new RotateTransform(angle);
+            rt.Freeze();
+            b.RenderTransform = rt;
+            b.IsHitTestVisible = false;
+            StackPanel sp = new StackPanel();
+            sp.VerticalAlignment = VerticalAlignment.Center;
+            sp.HorizontalAlignment = HorizontalAlignment.Center;
+            for (int i = 0; i < text.Length; i++)
+            {
+                TextBlock t = Txt(text.Substring(i, 1), size * 0.40, Theme.B(Theme.C("#FFF1DF")), true);
+                t.FontFamily = Theme.FontTitle;
+                t.HorizontalAlignment = HorizontalAlignment.Center;
+                t.LineHeight = size * 0.42;
+                t.LineStackingStrategy = LineStackingStrategy.BlockLineHeight;
+                sp.Children.Add(t);
+            }
+            b.Child = sp;
+            return b;
+        }
+
+        /// <summary>页眉下的金线分隔（中间细、两头淡）。</summary>
+        public static Border Rule(double thickness)
+        {
+            Border b = new Border();
+            b.Height = thickness;
+            LinearGradientBrush g = new LinearGradientBrush();
+            g.StartPoint = new Point(0, 0.5);
+            g.EndPoint = new Point(1, 0.5);
+            g.GradientStops.Add(new GradientStop(Theme.Alpha(Theme.Gold, 0), 0.00));
+            g.GradientStops.Add(new GradientStop(Theme.Alpha(Theme.Gold, 0.85), 0.18));
+            g.GradientStops.Add(new GradientStop(Theme.Alpha(Theme.Gold, 0.85), 0.82));
+            g.GradientStops.Add(new GradientStop(Theme.Alpha(Theme.Gold, 0), 1.00));
+            g.Freeze();
+            b.Background = g;
+            return b;
+        }
+
         public static void AnimateOpacity(UIElement el, double to, int ms)
         {
             DoubleAnimation a = new DoubleAnimation(to, TimeSpan.FromMilliseconds(ms));

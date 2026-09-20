@@ -7,13 +7,15 @@ using System.Windows.Shapes;
 
 namespace TimePlanner.Core
 {
-    /// <summary>右键菜单皮肤：系统默认的是浅色 Aero 菜单，和深色界面完全不搭，这里整块自绘。</summary>
+    /// <summary>右键菜单皮肤：系统默认的是浅色 Aero 菜单，和圣旨版的木牍界面完全不搭，这里整块自绘。</summary>
     public static class MenuSkin
     {
         static Style _menuStyle;
         static ControlTemplate _itemTemplate;
 
-        const string ItemHot = "#232B3A";
+        const string ItemHot = "#462B18";       // 悬停：木色提亮
+        const string MenuBg = "#2E1C10";        // 木牍
+        const string MenuLine = "#553F1E";
 
         /// <summary>建一个套好皮肤的菜单容器。</summary>
         public static ContextMenu Create()
@@ -42,7 +44,7 @@ namespace TimePlanner.Core
         {
             Border b = new Border();
             b.Height = 1;
-            b.Background = Theme.B(Theme.C("#2E3546"));
+            b.Background = Theme.B(Theme.C(MenuLine));
             b.Margin = new Thickness(11, 6, 11, 6);
             menu.Items.Add(b);
         }
@@ -60,10 +62,10 @@ namespace TimePlanner.Core
             internal MenuRow(string icon, string text, bool danger)
             {
                 this.danger = danger;
-                label = Ui.Txt(text, 13, Theme.B(Theme.Text), false);
+                label = Ui.Txt(text, 13, Theme.B(Theme.TextOnWood), false);
                 label.VerticalAlignment = VerticalAlignment.Center;
 
-                glyph = Ui.IconPath(icon, 13.5, Theme.B(Theme.TextMuted), 1.45);
+                glyph = Ui.IconPath(icon, 13.5, Theme.B(Theme.TextOnWoodFaint), 1.45);
                 glyph.HorizontalAlignment = HorizontalAlignment.Left;
                 glyph.VerticalAlignment = VerticalAlignment.Center;
 
@@ -113,8 +115,8 @@ namespace TimePlanner.Core
                 if (on)
                 {
                     Item.Background = Theme.B(ItemHot);
-                    label.Foreground = Theme.B(danger ? Theme.Danger : Colors.White);
-                    glyph.Stroke = Theme.B(danger ? Theme.Danger : Colors.White);
+                    label.Foreground = Theme.B(danger ? Theme.Danger : Theme.C("#FFF1DF"));
+                    glyph.Stroke = Theme.B(danger ? Theme.Danger : Theme.C("#FFF1DF"));
                 }
                 else
                 {
@@ -125,8 +127,8 @@ namespace TimePlanner.Core
 
             void Paint()
             {
-                Color idle = danger ? Theme.Danger : (active ? Theme.Accent : Theme.Text);
-                Color idleIcon = danger ? Theme.Danger : (active ? Theme.Accent : Theme.TextMuted);
+                Color idle = danger ? Theme.Danger : (active ? Theme.Accent : Theme.TextOnWood);
+                Color idleIcon = danger ? Theme.Danger : (active ? Theme.Accent : Theme.TextOnWoodFaint);
                 label.Foreground = Theme.B(idle);
                 glyph.Stroke = Theme.B(idleIcon);
                 dot.Opacity = active ? 1 : 0;
@@ -142,7 +144,7 @@ namespace TimePlanner.Core
                 "<Setter Property='OverridesDefaultStyle' Value='True'/>" +
                 "<Setter Property='Template'><Setter.Value>" +
                 "<ControlTemplate TargetType='{x:Type ContextMenu}'>" +
-                "<Border MinWidth='188' Background='#151922' BorderBrush='#2C3342' BorderThickness='1' " +
+                "<Border MinWidth='188' Background='" + MenuBg + "' BorderBrush='#7A5612' BorderThickness='1' " +
                 "CornerRadius='12' Padding='3,6,3,6' SnapsToDevicePixels='True'>" +
                 "<Border.Effect>" +
                 "<DropShadowEffect BlurRadius='16' ShadowDepth='4' Direction='270' Opacity='0.55' Color='#000000'/>" +

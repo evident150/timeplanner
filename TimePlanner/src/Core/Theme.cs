@@ -6,67 +6,98 @@ using System.Windows.Media;
 
 namespace TimePlanner.Core
 {
-    /// <summary>全局配色与字体（深色主题）。</summary>
+    /// <summary>全局配色与字体（圣旨特别版：木牍 + 明黄绢面 + 朱砂金线）。</summary>
     public static class Theme
     {
         public static Color Bg, BgAlt, Panel, PanelHi, PanelSoft, Border, BorderHi;
         public static Color Text, TextMuted, TextFaint;
         public static Color Accent, AccentSoft, AccentDeep, OnAccent;
         public static Color Success, Warning, Danger, Purple;
-        public static FontFamily Font;
+        public static FontFamily Font, FontTitle;
+
+        // 圣旨专用色
+        public static Color Silk, SilkDeep, SilkEdge, Wood, WoodHi, Brocade, Gold, GoldSoft, Ink, Seal;
+        public static Color TextOnWood, TextOnWoodFaint;
+
+        // 小人对话框：宣纸底 + 金褐描边 + 朱字
+        public static Color Ivory, IvoryLine, IvoryInk;
 
         static readonly Dictionary<uint, SolidColorBrush> Cache = new Dictionary<uint, SolidColorBrush>();
 
-        public static readonly string[] AccentKeys = { "blue", "violet", "cyan", "green", "amber", "rose" };
+        public static readonly string[] AccentKeys = { "rose", "blue", "green", "amber", "violet", "cyan" };
 
         static Theme()
         {
-            Font = new FontFamily("Microsoft YaHei UI, Microsoft YaHei, Segoe UI, Arial");
-            Bg = C("#0D0F14");
-            BgAlt = C("#12151D");
-            Panel = C("#171B24");
-            PanelHi = C("#20252F");
-            PanelSoft = C("#141821");
-            Border = C("#262B37");
-            BorderHi = C("#39404F");
-            Text = C("#EAEDF5");
-            TextMuted = C("#96A0B5");
-            TextFaint = C("#616B80");
-            OnAccent = C("#0B0E14");
-            Success = C("#35C48D");
-            Warning = C("#F2A33C");
-            Danger = C("#F0576B");
-            Purple = C("#A77BFF");
-            SetAccent("blue");
+            Font = new FontFamily("楷体, KaiTi, STKaiti, 华文楷体, Microsoft YaHei UI, Microsoft YaHei, Segoe UI");
+            FontTitle = new FontFamily("华文新魏, STXinwei, 隶书, LiSu, STLiti, 楷体, KaiTi, Microsoft YaHei UI");
+
+            // 窗口最外的深色木框
+            Bg = C("#26170F");
+            BgAlt = C("#3A2415");
+            Wood = C("#3A2415");
+            WoodHi = C("#4E3320");
+            Brocade = C("#6E2C1F");
+
+            // 明黄绢面：内容区与卡片
+            Silk = C("#F4E6BC");
+            SilkDeep = C("#EBD9A6");
+            SilkEdge = C("#E0C98E");
+            Panel = C("#F9EECD");
+            PanelHi = C("#F1E0B2");
+            PanelSoft = C("#F3E5BC");
+
+            // 金线与墨色
+            Gold = C("#C9A227");
+            GoldSoft = C("#E4C87E");
+            Border = C("#CBA75E");
+            BorderHi = C("#E4C87E");
+            Ink = C("#3A2A17");
+            Seal = C("#A62824");
+
+            Ivory = C("#FDF6E3");
+            IvoryLine = C("#C0A46B");
+            IvoryInk = C("#8B1A1A");
+
+            Text = C("#3A2A17");
+            TextMuted = C("#7C6641");
+            TextFaint = C("#A48E63");
+            TextOnWood = C("#E6D4A6");
+            TextOnWoodFaint = C("#B49C6E");
+            OnAccent = C("#FFF7E4");
+            Success = C("#3E7A4A");
+            Warning = C("#BE8A2C");
+            Danger = C("#A62824");
+            Purple = C("#6E4B7C");
+            SetAccent("rose");
         }
 
         public static string AccentLabel(string key)
         {
             switch (key)
             {
-                case "violet": return "紫罗兰";
-                case "cyan": return "青蓝";
-                case "green": return "薄荷";
-                case "amber": return "琥珀";
-                case "rose": return "玫红";
-                default: return "晶蓝";
+                case "blue": return "石青";
+                case "cyan": return "靛青";
+                case "green": return "黛绿";
+                case "amber": return "藤黄";
+                case "violet": return "紫檀";
+                default: return "朱砂";
             }
         }
 
         public static void SetAccent(string key)
         {
-            string hex = "#5B8CFF";
+            string hex = "#B23A2A";                                  // 朱砂
             switch (key)
             {
-                case "violet": hex = "#A77BFF"; break;
-                case "cyan": hex = "#3FC5DD"; break;
-                case "green": hex = "#3FCB93"; break;
-                case "amber": hex = "#F0A73E"; break;
-                case "rose": hex = "#FF7391"; break;
+                case "blue": hex = "#2F5A7A"; break;                 // 石青
+                case "cyan": hex = "#2E6E78"; break;                 // 靛青
+                case "green": hex = "#3E7A4A"; break;                // 黛绿
+                case "amber": hex = "#BE8A2C"; break;                // 藤黄
+                case "violet": hex = "#7A4B6B"; break;               // 紫檀
             }
             Accent = C(hex);
-            AccentDeep = Blend(Accent, Bg, 0.34);
-            AccentSoft = Blend(Accent, Panel, 0.80);
+            AccentDeep = Blend(Accent, Bg, 0.30);
+            AccentSoft = Blend(Accent, Panel, 0.86);
             Cache.Clear();
         }
 

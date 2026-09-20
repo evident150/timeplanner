@@ -111,10 +111,19 @@ namespace TimePlanner.App
             };
 
             Grid root = new Grid();
+            root.Background = Theme.B(Theme.Bg);
             root.RowDefinitions.Add(new RowDefinition());
             root.RowDefinitions[0].Height = new GridLength(52);
             root.RowDefinitions.Add(new RowDefinition());
+            root.RowDefinitions[1].Height = GridLength.Auto;
+            root.RowDefinitions.Add(new RowDefinition());
+            root.RowDefinitions.Add(new RowDefinition());
+            root.RowDefinitions[3].Height = GridLength.Auto;
             root.Children.Add(BuildTitleBar());
+
+            Border rodTop = Ui.Rod(10);
+            Grid.SetRow(rodTop, 1);
+            root.Children.Add(rodTop);
 
             Grid body = new Grid();
             ColumnDefinition nav = new ColumnDefinition();
@@ -126,6 +135,7 @@ namespace TimePlanner.App
             body.Children.Add(side);
 
             Grid main = new Grid();
+            main.Background = Ui.Silk();
             main.RowDefinitions.Add(new RowDefinition());
             main.RowDefinitions[0].Height = GridLength.Auto;
             main.RowDefinitions.Add(new RowDefinition());
@@ -138,8 +148,12 @@ namespace TimePlanner.App
             Grid.SetColumn(main, 1);
             body.Children.Add(main);
 
-            Grid.SetRow(body, 1);
+            Grid.SetRow(body, 2);
             root.Children.Add(body);
+
+            Border rodBottom = Ui.Rod(10);
+            Grid.SetRow(rodBottom, 3);
+            root.Children.Add(rodBottom);
 
             fx = new Canvas();
             fx.IsHitTestVisible = false;
@@ -154,7 +168,7 @@ namespace TimePlanner.App
         Border BuildTitleBar()
         {
             Grid g = new Grid();
-            g.Background = Theme.B(Theme.BgAlt);
+            g.Background = Ui.Wood();
             ColumnDefinition a = new ColumnDefinition();
             a.Width = GridLength.Auto;
             g.ColumnDefinitions.Add(a);
@@ -165,19 +179,20 @@ namespace TimePlanner.App
             brand.Orientation = Orientation.Horizontal;
             brand.Margin = new Thickness(16, 0, 0, 0);
             brand.VerticalAlignment = VerticalAlignment.Center;
-            Border logo = Ui.Round(9, Theme.B(Theme.Accent));
+            Border logo = Ui.Round(6, Theme.B(Theme.Seal), Theme.B(Theme.Gold), 1.4);
             logo.Width = 28;
             logo.Height = 28;
-            Path mark = Ui.IconPath("check", 15, Theme.B(Colors.White), 2.0);
+            Path mark = Ui.IconPath("check", 15, Theme.B(Theme.GoldSoft), 2.0);
             mark.HorizontalAlignment = HorizontalAlignment.Center;
             mark.VerticalAlignment = VerticalAlignment.Center;
             logo.Child = mark;
             brand.Children.Add(logo);
-            TextBlock name = Ui.Txt("时间规划", 14, Theme.B(Theme.Text), true);
+            TextBlock name = Ui.Txt("时 间 规 划", 16, Theme.B(Theme.GoldSoft), true);
+            name.FontFamily = Theme.FontTitle;
             name.VerticalAlignment = VerticalAlignment.Center;
             name.Margin = new Thickness(10, 0, 0, 0);
             brand.Children.Add(name);
-            TextBlock en = Ui.Txt("TimePlanner", 11.5, Theme.B(Theme.TextFaint), false);
+            TextBlock en = Ui.Txt("圣旨特别版", 11.5, Theme.B(Theme.TextOnWoodFaint), false);
             en.VerticalAlignment = VerticalAlignment.Center;
             en.Margin = new Thickness(8, 1, 0, 0);
             brand.Children.Add(en);
@@ -195,7 +210,10 @@ namespace TimePlanner.App
             Grid.SetColumn(wins, 2);
             g.Children.Add(wins);
 
-            Border wrap = Ui.Round(0, Theme.B(Theme.BgAlt));
+            Border wrap = Ui.Round(0, Theme.Transparent);
+            wrap.Background = Ui.Wood();
+            wrap.BorderBrush = Theme.B(Theme.Alpha(Theme.Gold, 0.35));
+            wrap.BorderThickness = new Thickness(0, 0, 0, 1);
             wrap.Child = g;
             return wrap;
         }
@@ -209,22 +227,22 @@ namespace TimePlanner.App
             b.Cursor = Cursors.Hand;
             WindowChrome.SetIsHitTestVisibleInChrome(b, true);
             Path p;
-            if (kind == "min") p = Ui.IconPath("winmin", 11, Theme.B(Theme.TextMuted), 1.3);
-            else if (kind == "max") p = Ui.IconPath("winmax", 10, Theme.B(Theme.TextMuted), 1.3);
-            else p = Ui.IconPath("close", 11, Theme.B(Theme.TextMuted), 1.4);
+            if (kind == "min") p = Ui.IconPath("winmin", 11, Theme.B(Theme.TextOnWood), 1.3);
+            else if (kind == "max") p = Ui.IconPath("winmax", 10, Theme.B(Theme.TextOnWood), 1.3);
+            else p = Ui.IconPath("close", 11, Theme.B(Theme.TextOnWood), 1.4);
             p.HorizontalAlignment = HorizontalAlignment.Center;
             p.VerticalAlignment = VerticalAlignment.Center;
             b.Child = p;
 
             b.MouseEnter += delegate(object s, MouseEventArgs e)
             {
-                b.Background = Theme.B(kind == "close" ? Theme.Danger : Theme.PanelHi);
-                p.Stroke = Theme.B(kind == "close" ? Colors.White : Theme.Text);
+                b.Background = Theme.B(kind == "close" ? Theme.Seal : Theme.WoodHi);
+                p.Stroke = Theme.B(kind == "close" ? Theme.C("#FFF1DF") : Theme.GoldSoft);
             };
             b.MouseLeave += delegate(object s, MouseEventArgs e)
             {
                 b.Background = Theme.Transparent;
-                p.Stroke = Theme.B(Theme.TextMuted);
+                p.Stroke = Theme.B(Theme.TextOnWood);
             };
             b.MouseLeftButtonUp += delegate(object s, MouseButtonEventArgs e)
             {
@@ -239,7 +257,9 @@ namespace TimePlanner.App
         Border BuildSidebar()
         {
             Border side = new Border();
-            side.Background = Theme.B(Theme.BgAlt);
+            side.Background = Ui.Wood();
+            side.BorderBrush = Theme.B(Theme.Alpha(Theme.Gold, 0.30));
+            side.BorderThickness = new Thickness(0, 0, 1, 0);
             side.Padding = new Thickness(12, 14, 12, 12);
 
             Grid g = new Grid();
@@ -249,13 +269,14 @@ namespace TimePlanner.App
             g.RowDefinitions[1].Height = GridLength.Auto;
 
             navList = new StackPanel();
-            TextBlock planLabel = Ui.Txt("计划", 11, Theme.B(Theme.TextFaint), true);
-            planLabel.Margin = new Thickness(11, 0, 0, 6);
+            TextBlock planLabel = Ui.Txt("奉 天 承 运", 11, Theme.B(Theme.TextOnWoodFaint), true);
+            planLabel.FontFamily = Theme.FontTitle;
+            planLabel.Margin = new Thickness(11, 0, 0, 8);
             navList.Children.Add(planLabel);
-            navList.Children.Add(NavItem("today", "list", "今日"));
-            navList.Children.Add(NavItem("week", "calendar", "本周"));
-            navList.Children.Add(NavItem("done", "check", "已完成"));
-            navList.Children.Add(NavItem("settings", "gear", "设置"));
+            navList.Children.Add(NavItem("today", "list", "今日圣旨"));
+            navList.Children.Add(NavItem("week", "calendar", "本周奏章"));
+            navList.Children.Add(NavItem("done", "check", "已竟之事"));
+            navList.Children.Add(NavItem("settings", "gear", "钦此设置"));
             Grid.SetRow(navList, 0);
             g.Children.Add(navList);
 
@@ -285,18 +306,18 @@ namespace TimePlanner.App
             c2.Width = GridLength.Auto;
             g.ColumnDefinitions.Add(c2);
 
-            Path p = Ui.IconPath(icon, 16, Theme.B(Theme.TextMuted), 1.5);
+            Path p = Ui.IconPath(icon, 16, Theme.B(Theme.TextOnWoodFaint), 1.5);
             p.VerticalAlignment = VerticalAlignment.Center;
             p.Margin = new Thickness(0, 0, 11, 0);
             Grid.SetColumn(p, 0);
             g.Children.Add(p);
 
-            TextBlock t = Ui.Txt(label, 13.5, Theme.B(Theme.TextMuted), false);
+            TextBlock t = Ui.Txt(label, 14, Theme.B(Theme.TextOnWood), false);
             t.VerticalAlignment = VerticalAlignment.Center;
             Grid.SetColumn(t, 1);
             g.Children.Add(t);
 
-            TextBlock badge = Ui.Txt("", 11.5, Theme.B(Theme.TextFaint), false);
+            TextBlock badge = Ui.Txt("", 11.5, Theme.B(Theme.TextOnWoodFaint), false);
             badge.VerticalAlignment = VerticalAlignment.Center;
             badge.Name = "badge_" + key;
             Grid.SetColumn(badge, 2);
@@ -314,15 +335,17 @@ namespace TimePlanner.App
         Border BuildPageHeader()
         {
             Border head = new Border();
-            head.Padding = new Thickness(26, 22, 26, 10);
+            head.Padding = new Thickness(26, 20, 26, 8);
             Grid g = new Grid();
             ColumnDefinition c0 = new ColumnDefinition();
             c0.Width = new GridLength(1, GridUnitType.Star);
             g.ColumnDefinitions.Add(c0);
             g.ColumnDefinitions.Add(new ColumnDefinition());
+            g.ColumnDefinitions.Add(new ColumnDefinition());
 
             StackPanel left = new StackPanel();
-            pageTitle = Ui.Txt("", 23, Theme.B(Theme.Text), true);
+            pageTitle = Ui.Txt("", 25, Theme.B(Theme.Ink), true);
+            pageTitle.FontFamily = Theme.FontTitle;
             pageSubtitle = Ui.Txt("", 12.5, Theme.B(Theme.TextMuted), false);
             pageSubtitle.Margin = new Thickness(0, 5, 0, 0);
             left.Children.Add(pageTitle);
@@ -336,7 +359,16 @@ namespace TimePlanner.App
             Grid.SetColumn(pageActions, 1);
             g.Children.Add(pageActions);
 
-            head.Child = g;
+            Border seal = Ui.Seal("御览", 42, -6);
+            seal.VerticalAlignment = VerticalAlignment.Center;
+            seal.Margin = new Thickness(16, 0, 2, 0);
+            Grid.SetColumn(seal, 2);
+            g.Children.Add(seal);
+
+            StackPanel wrap = new StackPanel();
+            wrap.Children.Add(g);
+            wrap.Children.Add(Ui.Rule(1.4));
+            head.Child = wrap;
             return head;
         }
 
@@ -452,15 +484,15 @@ namespace TimePlanner.App
                 if (b == null || !(b.Tag is string)) continue;
                 string key = (string)b.Tag;
                 bool on = key == Page;
-                b.Background = Theme.B(on ? Theme.AccentSoft : Colors.Transparent);
+                b.Background = Theme.B(on ? Theme.Accent : Colors.Transparent);
                 Grid g = (Grid)b.Child;
                 Path p = (Path)g.Children[0];
                 TextBlock t = (TextBlock)g.Children[1];
                 TextBlock badge = (TextBlock)g.Children[2];
-                p.Stroke = Theme.B(on ? Theme.Accent : Theme.TextMuted);
-                t.Foreground = Theme.B(on ? Theme.Text : Theme.TextMuted);
+                p.Stroke = Theme.B(on ? Theme.OnAccent : Theme.TextOnWoodFaint);
+                t.Foreground = Theme.B(on ? Theme.OnAccent : Theme.TextOnWood);
                 t.FontWeight = on ? FontWeights.SemiBold : FontWeights.Normal;
-                badge.Foreground = Theme.B(on ? Theme.Accent : Theme.TextFaint);
+                badge.Foreground = Theme.B(on ? Theme.OnAccent : Theme.TextOnWoodFaint);
                 if (key == "today") badge.Text = CountText(DateTime.Today);
                 else if (key == "week")
                 {

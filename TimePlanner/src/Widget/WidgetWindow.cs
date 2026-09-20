@@ -7,6 +7,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Media.Animation;
 using System.Windows.Shapes;
 using System.Windows.Threading;
 using TimePlanner.Core;
@@ -18,6 +19,7 @@ namespace TimePlanner.Widget
     {
         const double CardWidth = 300;
         const double AutoListMaxHeight = 330;
+        const double MinListHeight = 110;
         const int EdgeLeft = 1, EdgeRight = 2, EdgeTop = 4, EdgeBottom = 8;
 
         readonly Store store;
@@ -35,6 +37,12 @@ namespace TimePlanner.Widget
         TextBlock progressText;
         MiniBar bar;
         HintBox addBox;
+        FrameworkElement minister;
+        Border bubbleBox;
+        TextBlock bubbleText;
+        TextBlock bubbleSign;
+        DispatcherTimer bubbleTimer;
+        double minCardHeight = 340;
         bool showDone;
 
         DispatcherTimer rebuild;
@@ -106,12 +114,12 @@ namespace TimePlanner.Widget
 
         void Build()
         {
-            card = Ui.Round(16, Theme.B(Theme.Panel), Theme.B(Theme.Border), 1);
+            card = Ui.Round(10, Theme.B(Theme.Brocade), Theme.B(Theme.Gold), 1.2);
             card.Width = CardWidth;
             card.Effect = Ui.Shadow(18, 0.45, 4);
 
             Grid root = new Grid();
-            root.Margin = new Thickness(14, 12, 14, 12);
+            root.Margin = new Thickness(12, 10, 12, 9);
             for (int i = 0; i < 5; i++) root.RowDefinitions.Add(new RowDefinition());
             root.RowDefinitions[0].Height = GridLength.Auto;
             root.RowDefinitions[1].Height = GridLength.Auto;
@@ -134,7 +142,34 @@ namespace TimePlanner.Widget
             UIElement foot = BuildFooter();
             Grid.SetRow(foot, 4);
             root.Children.Add(foot);
-            card.Child = root;
+
+            // 明黄绢面：金线勾边，四周留出织锦外框
+            Border silk = Ui.Round(6, Ui.Silk(), Theme.B(Theme.Alpha(Theme.Gold, 0.55)), 1);
+            silk.Child = root;
+
+            // 卷轴：轴杆 + 两端金帽
+            Grid roller = new Grid();
+            roller.Margin = new Thickness(0, 0, 0, 5);
+            Border rod = Ui.Rod(11);
+            rod.CornerRadius = new CornerRadius(5);
+            rod.Margin = new Thickness(9, 0, 9, 0);
+            roller.Children.Add(rod);
+            Border capLeft = Ui.RodCap(22, 15);
+            capLeft.HorizontalAlignment = HorizontalAlignment.Left;
+            roller.Children.Add(capLeft);
+            Border capRight = Ui.RodCap(22, 15);
+            capRight.HorizontalAlignment = HorizontalAlignment.Right;
+            roller.Children.Add(capRight);
+
+            Grid frame = new Grid();
+            frame.Margin = new Thickness(4, 4, 4, 5);
+            frame.RowDefinitions.Add(new RowDefinition());
+            frame.RowDefinitions.Add(new RowDefinition());
+            frame.RowDefinitions[0].Height = GridLength.Auto;
+            frame.Children.Add(roller);
+            Grid.SetRow(silk, 1);
+            frame.Children.Add(silk);
+            card.Child = frame;
 
             Grid host = new Grid();
             host.Margin = new Thickness(14);
@@ -145,7 +180,44 @@ namespace TimePlanner.Widget
             rootHost.Children.Add(fx);
             Content = rootHost;
 
+            minCardHeight = MeasureCard();
             ContextMenu = BuildMenu();
+        }
+
+        /// <summary>
+        /// 卡片内容自然撑开的高度：拖边缘缩小时拿它兜底，免得把页脚和小人压没。
+        /// 量的时候把列表压到最矮，这样下限 = 其它部分全显示 + 一小块列表；固定高度模式下也不会量出整张列表。
+        /// </summary>
+        double MeasureCard()
+        {
+            try
+            {
+                FrameworkElement inner = card.Child as FrameworkElement;
+                if (inner == null) return 340;
+                double keep = double.PositiveInfinity;
+                if (listScroll != null)
+                {
+                    keep = listScroll.MaxHeight;
+                    listScroll.MaxHeight = MinListHeight;      // 缩到最小时列表还能留一小块滚动区
+                }
+                inner.Measure(new Size(CardWidth - 12, double.PositiveInfinity));
+                double h = inner.DesiredSize.Height;
+                if (listScroll != null) listScroll.MaxHeight = keep;
+                if (h > 80) return h + 30;
+            }
+            catch (Exception) { }
+            return 340;
+        }
+
+        /// <summary>抬头：近几天用「今日事宜」这种说法，再远就直接报日子。</summary>
+        static string DayHeadline(DateTime d)
+        {
+            int diff = (int)(d.Date - DateTime.Today).TotalDays;
+            if (diff == 0) return "今 日 事 宜";
+            if (diff == 1) return "明 日 事 宜";
+            if (diff == -1) return "昨 日 事 宜";
+            if (diff == 2) return "后 日 事 宜";
+            return Fmt.Relative(d);
         }
 
         /// <summary>右键菜单：一次建好，只在弹出时同步「当前是哪种模式」的标记。</summary>
@@ -191,8 +263,9 @@ namespace TimePlanner.Widget
             g.ColumnDefinitions.Add(new ColumnDefinition());
 
             StackPanel left = new StackPanel();
-            dayTitle = Ui.Txt("今天", 14, Theme.B(Theme.Text), true);
-            dateLine = Ui.Txt("", 11.5, Theme.B(Theme.TextFaint), false);
+            dayTitle = Ui.Txt("今 日 事 宜", 15.5, Theme.B(Theme.Seal), true);
+            dayTitle.FontFamily = Theme.FontTitle;
+            dateLine = Ui.Txt("", 11.5, Theme.B(Theme.TextMuted), false);
             dateLine.Margin = new Thickness(0, 2, 0, 0);
             left.Children.Add(dayTitle);
             left.Children.Add(dateLine);
@@ -269,7 +342,7 @@ namespace TimePlanner.Widget
             right.Orientation = Orientation.Horizontal;
             right.HorizontalAlignment = HorizontalAlignment.Right;
             right.VerticalAlignment = VerticalAlignment.Center;
-            Border toggle = Ui.Chip("已完成", false, delegate()
+            Border toggle = Ui.Chip("已竟之事", false, delegate()
             {
                 showDone = !showDone;
                 Refresh();
@@ -304,10 +377,8 @@ namespace TimePlanner.Widget
         Border BuildFooter()
         {
             StackPanel sp = new StackPanel();
-            Border line = new Border();
-            line.Height = 1;
-            line.Background = Theme.B(Theme.Border);
-            line.Margin = new Thickness(0, 12, 0, 11);
+            Border line = Ui.Rule(1.2);
+            line.Margin = new Thickness(0, 11, 0, 10);
             sp.Children.Add(line);
 
             Border addWrap = Ui.Round(9, Theme.B(Theme.PanelSoft), Theme.B(Theme.Border), 1);
@@ -320,13 +391,139 @@ namespace TimePlanner.Widget
             plus.Margin = new Thickness(0, 0, 7, 0);
             Grid.SetColumn(plus, 0);
             g.Children.Add(plus);
-            addBox = new HintBox("添加任务，回车保存", 12.5);
+            addBox = new HintBox("落笔记事，回车即录", 12.5);
             addBox.Submitted = delegate(string text) { store.Add(text, day); AnimatedRefresh(); };
             Grid.SetColumn(addBox, 1);
             g.Children.Add(addBox);
             addWrap.Child = g;
             sp.Children.Add(addWrap);
+
+            sp.Children.Add(BuildMinister());
             return new Border { Child = sp };
+        }
+
+        /// <summary>
+        /// 左下角的小人 + 他说的话。独自占页脚最后一行，压不到上面任何文字；
+        /// 没事的时候嘴里挂一句「朕在此候着」，完成任务时换成贺辞。
+        /// </summary>
+        Grid BuildMinister()
+        {
+            Grid band = new Grid();
+            band.Margin = new Thickness(-2, 5, 0, 0);
+            ColumnDefinition left = new ColumnDefinition();
+            left.Width = GridLength.Auto;
+            band.ColumnDefinitions.Add(left);
+            band.ColumnDefinitions.Add(new ColumnDefinition());
+
+            minister = MinisterArt(78);
+            minister.VerticalAlignment = VerticalAlignment.Bottom;
+            Ui.Tip(minister, "左下角这位：办成一件事，他就有话讲");
+            Grid.SetColumn(minister, 0);
+            band.Children.Add(minister);
+
+            Grid bubble = new Grid();
+            ColumnDefinition tailCol = new ColumnDefinition();
+            tailCol.Width = new GridLength(11);
+            bubble.ColumnDefinitions.Add(tailCol);
+            bubble.ColumnDefinitions.Add(new ColumnDefinition());
+
+            Path tail = new Path();
+            tail.Data = Fireworks.Tail();
+            tail.Stretch = Stretch.Fill;
+            tail.Width = 11;
+            tail.Height = 16;
+            tail.Fill = Theme.B(Theme.Ivory);
+            tail.Stroke = Theme.B(Theme.IvoryLine);
+            tail.StrokeThickness = 1.1;
+            tail.VerticalAlignment = VerticalAlignment.Center;
+            tail.Margin = new Thickness(0, 7, 0, 0);
+            bubble.Children.Add(tail);
+
+            bubbleBox = Ui.Round(8, Theme.B(Theme.Ivory), Theme.B(Theme.IvoryLine), 1.3);
+            bubbleBox.Padding = new Thickness(11, 6, 11, 7);
+            bubbleBox.VerticalAlignment = VerticalAlignment.Center;
+            bubbleBox.RenderTransformOrigin = new Point(0.05, 0.5);
+            StackPanel lines = new StackPanel();
+            bubbleText = Ui.Txt(Fireworks.Silent, 13.5, Theme.B(Theme.TextFaint), true);
+            bubbleText.FontFamily = Theme.FontTitle;
+            bubbleText.TextWrapping = TextWrapping.Wrap;
+            lines.Children.Add(bubbleText);
+            bubbleSign = Ui.Txt(Fireworks.CheerSign, 10, Theme.B(Theme.TextFaint), false);
+            bubbleSign.HorizontalAlignment = HorizontalAlignment.Right;
+            bubbleSign.Margin = new Thickness(0, 2, 0, 0);
+            bubbleSign.Visibility = Visibility.Collapsed;
+            lines.Children.Add(bubbleSign);
+            bubbleBox.Child = lines;
+            Grid.SetColumn(bubbleBox, 1);
+            bubble.Children.Add(bubbleBox);
+
+            Grid.SetColumn(bubble, 1);
+            band.Children.Add(bubble);
+            return band;
+        }
+
+        /// <summary>小人本体：透明底 PNG，按原始比例摆，缩放时高保真插值。</summary>
+        FrameworkElement MinisterArt(double width)
+        {
+            Image img = new Image();
+            img.Source = Art.Minister();
+            img.Stretch = Stretch.Uniform;
+            img.Width = width;
+            img.Height = width * 495.0 / 306.0;
+            img.SnapsToDevicePixels = true;
+            RenderOptions.SetBitmapScalingMode(img, BitmapScalingMode.HighQuality);
+            if (img.Source == null) img.Visibility = Visibility.Collapsed;
+            return img;
+        }
+
+        /// <summary>小人开口说一句：对话框弹一下，过一会儿自己回到「候着」。</summary>
+        void Say(string text)
+        {
+            if (bubbleText == null || string.IsNullOrEmpty(text)) return;
+            bubbleText.Text = text;
+            bubbleText.Foreground = Theme.B(Theme.IvoryInk);
+            if (bubbleSign != null) bubbleSign.Visibility = Visibility.Visible;
+            PopBubble();
+            if (bubbleTimer == null)
+            {
+                bubbleTimer = new DispatcherTimer();
+                bubbleTimer.Interval = TimeSpan.FromSeconds(9);
+                bubbleTimer.Tick += delegate(object s, EventArgs e)
+                {
+                    bubbleTimer.Stop();
+                    RestBubble();
+                };
+            }
+            bubbleTimer.Stop();
+            bubbleTimer.Start();
+        }
+
+        /// <summary>回到待命状态，别让上一句贺辞一直挂在那儿。</summary>
+        void RestBubble()
+        {
+            if (bubbleText == null) return;
+            bubbleText.Text = Fireworks.Silent;
+            bubbleText.Foreground = Theme.B(Theme.TextFaint);
+            if (bubbleSign != null) bubbleSign.Visibility = Visibility.Collapsed;
+        }
+
+        /// <summary>对话框从尾巴那侧轻轻弹出来（只动缩放和透明度，桌面插件上很便宜）。</summary>
+        void PopBubble()
+        {
+            if (bubbleBox == null) return;
+            ScaleTransform sc = new ScaleTransform(1, 1);
+            bubbleBox.RenderTransform = sc;
+            BackEase pop = new BackEase();
+            pop.EasingMode = EasingMode.EaseOut;
+            pop.Amplitude = 0.55;
+            DoubleAnimation grow = new DoubleAnimation(0.86, 1, TimeSpan.FromMilliseconds(300));
+            grow.EasingFunction = pop;
+            grow.FillBehavior = FillBehavior.Stop;
+            sc.BeginAnimation(ScaleTransform.ScaleXProperty, grow);
+            sc.BeginAnimation(ScaleTransform.ScaleYProperty, grow);
+            DoubleAnimation fade = new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(170));
+            fade.FillBehavior = FillBehavior.Stop;
+            bubbleBox.BeginAnimation(UIElement.OpacityProperty, fade);
         }
 
         // ---------------- 拖边缘缩放 ----------------
@@ -380,6 +577,7 @@ namespace TimePlanner.Widget
             if (b == null || RenderMode || resizing) return;
             resizeEdge = (int)b.Tag;
             resizing = true;
+            minCardHeight = MeasureCard();
             b.CaptureMouse();
             if (card != null) card.Effect = null;
 
@@ -419,7 +617,7 @@ namespace TimePlanner.Widget
 
             double minW = CardWidth * scale + 28;
             if (minW < 240) minW = 240;
-            double minH = 150 * scale + 28;
+            double minH = minCardHeight * scale + 28;
             if (minH < 150) minH = 150;
             double maxW = SystemParameters.WorkArea.Width;
             double maxH = SystemParameters.WorkArea.Height;
@@ -592,11 +790,11 @@ namespace TimePlanner.Widget
             List<TaskItem> open = all.Where(t => !t.Done).ToList();
             List<TaskItem> done = all.Where(t => t.Done).ToList();
 
-            dayTitle.Text = isToday ? "今天" : Fmt.Relative(d);
+            dayTitle.Text = DayHeadline(d);
             bool fixedSize = (SizeToContent & SizeToContent.Width) == (SizeToContent)0;
             dateLine.Text = Fmt.DateCN(d) + " " + Fmt.Weekday(d) + (isToday ? "" : "　·　点日历图标回到今天");
             int pct = all.Count == 0 ? 0 : (int)Math.Round(done.Count * 100.0 / all.Count);
-            progressText.Text = all.Count == 0 ? "还没有安排" : string.Format("已完成 {0}/{1}　·　{2}%", done.Count, all.Count, pct);
+            progressText.Text = all.Count == 0 ? "尚无安排" : string.Format("已竟 {0} / {1} 事　·　{2}%", done.Count, all.Count, pct);
             bar.SetRatio(all.Count == 0 ? 0 : (double)done.Count / all.Count, false);
 
             weekStrip.Children.Clear();
@@ -641,10 +839,10 @@ namespace TimePlanner.Widget
             {
                 StackPanel empty = new StackPanel();
                 empty.Margin = new Thickness(0, 6, 0, 6);
-                TextBlock e1 = Ui.Txt(isToday ? "今天还没有任务" : "这天没有任务", 12.5, Theme.B(Theme.TextFaint), false);
+                TextBlock e1 = Ui.Txt(isToday ? "今日尚无未竟之事" : "此日无甚要事", 12.5, Theme.B(Theme.TextFaint), false);
                 e1.HorizontalAlignment = HorizontalAlignment.Center;
                 empty.Children.Add(e1);
-                TextBlock e2 = Ui.Txt("在下面输入框添加一条吧", 11, Theme.B(Theme.TextFaint), false);
+                TextBlock e2 = Ui.Txt("于下方落笔记事", 11, Theme.B(Theme.TextFaint), false);
                 e2.HorizontalAlignment = HorizontalAlignment.Center;
                 e2.Margin = new Thickness(0, 4, 0, 0);
                 empty.Children.Add(e2);
@@ -660,7 +858,7 @@ namespace TimePlanner.Widget
                 }
                 if (open.Count == 0 && done.Count > 0)
                 {
-                    TextBlock allDone = Ui.Txt("全部完成 🎉", 12.5, Theme.B(Theme.Success), true);
+                    TextBlock allDone = Ui.Txt("今日事已竟，甚好", 12.5, Theme.B(Theme.Success), true);
                     allDone.HorizontalAlignment = HorizontalAlignment.Center;
                     allDone.Margin = new Thickness(0, 4, 0, 4);
                     listHost.Children.Add(allDone);
@@ -694,15 +892,16 @@ namespace TimePlanner.Widget
             return r;
         }
 
-        /// <summary>完成一条任务时放一筒礼花；一天的任务全部完成时再补一筒大的。</summary>
+        /// <summary>完成一条任务时：勾选框处放一筒礼花，左下角的小人接一句贺辞。</summary>
         void Celebrate(TaskRow row, TaskItem item)
         {
             if (fx == null) return;
             bool all = TaskQuery.AllDone(store.Data.Tasks, item.Date);
             Point o = row.CheckCenter(fx);
             double aim = o.X > fx.ActualWidth * 0.55 ? -146 : -34;
-            Fireworks.Popper(fx, o, all ? 1.5 : 1.25, aim, Fireworks.PickCheer());
-            if (all) Fireworks.Popper(fx, Ui.CenterOf(card, fx), 1.6, -90, Fireworks.AllDone);
+            Fireworks.Popper(fx, o, all ? 1.5 : 1.25, aim, null);
+            if (all) Fireworks.Popper(fx, Ui.CenterOf(card, fx), 1.6, -90, null);
+            Say(all ? Fireworks.AllDone : Fireworks.PickCheer());
         }
 
         /// <summary>离屏预览用：造一份和右键弹出时一模一样的菜单（ContextMenu 不允许挂进可视树，只能单独测量渲染）。</summary>
@@ -717,7 +916,8 @@ namespace TimePlanner.Widget
             if (fx == null) return;
             TaskRow row = Ui.Find<TaskRow>(listHost);
             Point o = row != null ? row.CheckCenter(fx) : Ui.CenterOf(card, fx);
-            Fireworks.Popper(fx, o, 1.3, o.X > fx.ActualWidth * 0.55 ? -146 : -40, Fireworks.Cheers[0]);
+            Fireworks.Popper(fx, o, 1.3, o.X > fx.ActualWidth * 0.55 ? -146 : -40, null);
+            Say(Fireworks.Cheers[0]);
         }
 
         // ---------------- 窗口层级 / 位置 / 尺寸 ----------------

@@ -90,17 +90,21 @@ if (-not $SkipIcon -or -not (Test-Path $icon)) {
     if ($LASTEXITCODE -ne 0) { throw "图标生成失败" }
 }
 
+$art = Join-Path $root "assets\minister.png"
+$resArgs = @()
+if (Test-Path $art) { $resArgs += "/resource:" + $art }
+
 $common = @("/nologo", "/noconfig", "/langversion:5", "/codepage:65001", "/platform:anycpu",
             "/optimize+", "/warn:4",
             "/win32manifest:$manifest",
             "/win32icon:$icon")
 
 $appExe = Join-Path $dist "TimePlanner.exe"
-& $csc @common /target:winexe /out:$appExe $refArgs $core $app
+& $csc @common /target:winexe /out:$appExe $refArgs $resArgs $core $app
 if ($LASTEXITCODE -ne 0) { throw "主程序编译失败" }
 
 $widgetExe = Join-Path $dist "TimePlanner.Widget.exe"
-& $csc @common /target:winexe /out:$widgetExe $refArgs $core $widget
+& $csc @common /target:winexe /out:$widgetExe $refArgs $resArgs $core $widget
 if ($LASTEXITCODE -ne 0) { throw "桌面插件编译失败" }
 
 Write-Host ""

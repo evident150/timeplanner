@@ -75,21 +75,21 @@ namespace TimePlanner.App
             List<TaskItem> open = all.Where(t => !t.Done).ToList();
             List<TaskItem> done = all.Where(t => t.Done).ToList();
 
-            pageTitle.Text = day == DateTime.Today ? "今天" : Fmt.Relative(day) + "的安排";
-            pageSubtitle.Text = Fmt.Full(day) + string.Format("　·　共 {0} 项，已完成 {1} 项", all.Count, done.Count);
+            pageTitle.Text = day == DateTime.Today ? "今 日 圣 旨" : Fmt.Relative(day) + " 之 圣 旨";
+            pageSubtitle.Text = Fmt.Full(day) + string.Format("　·　共 {0} 事，已竟 {1} 事", all.Count, done.Count);
             pageActions.Children.Clear();
 
             pageActions.Children.Add(NavArrow("left", delegate() { DayAnchor = day.AddDays(-1); Refresh(); }, null));
             if (day != DateTime.Today)
             {
-                Border today = Ui.Chip("回到今天", false, delegate() { DayAnchor = DateTime.Today; Refresh(); }, Theme.Accent);
+                Border today = Ui.Chip("回到今日", false, delegate() { DayAnchor = DateTime.Today; Refresh(); }, Theme.Accent);
                 today.Margin = new Thickness(6, 0, 0, 0);
                 pageActions.Children.Add(today);
             }
             pageActions.Children.Add(NavArrow("right", delegate() { DayAnchor = day.AddDays(1); Refresh(); }, null));
             if (open.Count > 0)
             {
-                Border defer = Ui.TextButton("未完成顺延到明天", delegate()
+                Border defer = Ui.TextButton("未竟之事，顺延明日", delegate()
                 {
                     Store.Defer(day, day.AddDays(1));
                     DayAnchor = day.AddDays(1);
@@ -137,19 +137,19 @@ namespace TimePlanner.App
             StackPanel right = new StackPanel();
             right.VerticalAlignment = VerticalAlignment.Center;
             right.HorizontalAlignment = HorizontalAlignment.Right;
-            right.Children.Add(StatLine("待完成", open.Count.ToString(), Theme.Accent));
-            right.Children.Add(StatLine("已完成", done.Count.ToString(), Theme.Success));
+            right.Children.Add(StatLine("待竟", open.Count.ToString(), Theme.Accent));
+            right.Children.Add(StatLine("已竟", done.Count.ToString(), Theme.Success));
             Grid.SetColumn(right, 1);
             pg.Children.Add(right);
             progress.Child = pg;
             sp.Children.Add(progress);
 
-            sp.Children.Add(AddRow(day, "添加" + Fmt.Relative(day) + "的任务，回车保存"));
+            sp.Children.Add(AddRow(day, "落笔记事：写下" + Fmt.Relative(day) + "之事，回车即录"));
 
-            sp.Children.Add(ListHeader("待办", open.Count, null));
+            sp.Children.Add(ListHeader("未竟之事", open.Count, null));
             if (open.Count == 0)
             {
-                sp.Children.Add(EmptyState("check", "没有待办事项", "在上面的输入框写下你想完成的事情"));
+                sp.Children.Add(EmptyState("check", "没有未竟之事", "在上面的输入框写下你想完成的事情"));
             }
             else
             {
@@ -163,7 +163,7 @@ namespace TimePlanner.App
 
             if (done.Count > 0)
             {
-                Border head = ListHeader("已完成", done.Count, delegate()
+                Border head = ListHeader("已竟之事", done.Count, delegate()
                 {
                     ShowDoneSection = !ShowDoneSection;
                     Refresh();
@@ -311,8 +311,8 @@ namespace TimePlanner.App
             List<TaskItem> week = TaskQuery.InRange(Store.Data.Tasks, start, end);
             int done = week.Count(t => t.Done);
 
-            pageTitle.Text = start == TaskQuery.WeekStart(DateTime.Today, Store.Settings.WeekStartMonday) ? "本周计划" : "周计划";
-            pageSubtitle.Text = Fmt.Range(start, end) + string.Format("　·　共 {0} 项，已完成 {1} 项　·　按住任务拖到别的日期即可改期", week.Count, done);
+            pageTitle.Text = start == TaskQuery.WeekStart(DateTime.Today, Store.Settings.WeekStartMonday) ? "本 周 奏 章" : "一 周 奏 章";
+            pageSubtitle.Text = Fmt.Range(start, end) + string.Format("　·　共 {0} 事，已竟 {1} 事　·　按住任务拖到别的日期即可改期", week.Count, done);
             pageActions.Children.Clear();
             pageActions.Children.Add(NavArrow("left", delegate() { WeekAnchor = start.AddDays(-7); Refresh(); }, "上一周"));
             DateTime thisWeek = TaskQuery.WeekStart(DateTime.Today, Store.Settings.WeekStartMonday);
@@ -426,7 +426,7 @@ namespace TimePlanner.App
                 }
                 gs.Children.Add(rows);
 
-                Border add = AddRow(d, "添加" + Fmt.Weekday(d) + "的任务");
+                Border add = AddRow(d, "落笔记事：" + Fmt.Weekday(d));
                 add.Margin = new Thickness(0, 6, 0, 0);
                 gs.Children.Add(add);
 
@@ -457,8 +457,8 @@ namespace TimePlanner.App
                 return db.CompareTo(da);
             });
 
-            pageTitle.Text = "已完成";
-            pageSubtitle.Text = string.Format("共 {0} 项已完成记录（勾选框可撤销完成）", done.Count);
+            pageTitle.Text = "已 竟 之 事";
+            pageSubtitle.Text = string.Format("共 {0} 事已竟（勾选框可撤销）", done.Count);
             pageActions.Children.Clear();
             int old = Store.Data.Tasks.Count(t => t.Done && t.Date.Date < DateTime.Today.AddDays(-30));
             if (old > 0)
@@ -505,7 +505,7 @@ namespace TimePlanner.App
         UIElement BuildSettingsPage()
         {
             Settings st = Store.Settings;
-            pageTitle.Text = "设置";
+            pageTitle.Text = "钦 此 设 置";
             pageSubtitle.Text = "桌面插件外观、数据与启动选项";
             pageActions.Children.Clear();
 
@@ -645,7 +645,7 @@ namespace TimePlanner.App
             Border reload = Ui.TextButton("重新载入数据", delegate() { Store.Reload(); Refresh(); }, false);
             reload.Margin = new Thickness(8, 0, 0, 0);
             dataLine.Children.Add(reload);
-            Border clean = Ui.TextButton("清理 30 天前的已完成", delegate() { Store.ClearDoneBefore(DateTime.Today.AddDays(-30)); }, false);
+            Border clean = Ui.TextButton("清理 30 天前的已竟之事", delegate() { Store.ClearDoneBefore(DateTime.Today.AddDays(-30)); }, false);
             clean.Margin = new Thickness(8, 0, 0, 0);
             dataLine.Children.Add(clean);
             data.Children.Add(path);
@@ -657,7 +657,7 @@ namespace TimePlanner.App
             // 关于
             StackPanel about = new StackPanel();
             about.Children.Add(Ui.Txt(AppVersion.Display + "　·　原生 WPF（.NET Framework 4.8），无外部依赖", 12, Theme.B(Theme.TextMuted), false));
-            TextBlock keys = Ui.Txt("使用提示：\n· 输入框支持「!!」紧急、「!」重要、「#标签」快速标记\n· 桌面插件：拖动标题栏移动位置，双击标题栏打开主程序，右键查看更多操作\n· 完成任务时勾选框处会放一筒礼花（彩纸 + 一句鼓励的话），当天全部完成还会再补一筒大的\n· 主程序点 ✕ 会隐藏到托盘，托盘菜单可退出", 12, Theme.B(Theme.TextMuted), false);
+            TextBlock keys = Ui.Txt("使用提示：\n· 输入框支持「!!」紧急、「!」重要、「#标签」快速标记\n· 桌面插件：拖动标题栏移动位置，双击标题栏打开主程序，右键查看更多操作\n· 完成任务时会放一筒礼花，并在插件左下角由小人说一句贺辞；当天全部完成还会再补一筒大的\n· 主程序点 ✕ 会隐藏到托盘，托盘菜单可退出", 12, Theme.B(Theme.TextMuted), false);
             keys.Margin = new Thickness(0, 8, 0, 0);
             keys.TextWrapping = TextWrapping.Wrap;
             about.Children.Add(keys);
@@ -675,12 +675,12 @@ namespace TimePlanner.App
         {
             switch (key)
             {
-                case "violet": return "#A77BFF";
-                case "cyan": return "#3FC5DD";
-                case "green": return "#3FCB93";
-                case "amber": return "#F0A73E";
-                case "rose": return "#FF7391";
-                default: return "#5B8CFF";
+                case "blue": return "#2F5A7A";
+                case "cyan": return "#2E6E78";
+                case "green": return "#3E7A4A";
+                case "amber": return "#BE8A2C";
+                case "violet": return "#7A4B6B";
+                default: return "#B23A2A";
             }
         }
 
