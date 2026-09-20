@@ -12,3 +12,6 @@ desktop.ini
 *.user
 outputs/README.md
 
+
+# 本地留存的旧版（不进 git；release.ps1 的自动清理也不会碰）
+outputs/经典版-*/

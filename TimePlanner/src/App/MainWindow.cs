@@ -30,6 +30,12 @@ namespace TimePlanner.App
         StackPanel pageActions;
         StackPanel navList;
         StackPanel sideFoot;
+        Border mascotBox;
+        TextBlock mascotText;
+        TextBlock mascotSign;
+        DispatcherTimer mascotTimer;
+        string mascotLine = "";
+        string mascotCheer;
         DispatcherTimer rebuildTimer;
         bool animating;
         string lastSignature = "";
@@ -265,8 +271,12 @@ namespace TimePlanner.App
             Grid g = new Grid();
             g.RowDefinitions.Add(new RowDefinition());
             g.RowDefinitions.Add(new RowDefinition());
+            g.RowDefinitions.Add(new RowDefinition());
+            g.RowDefinitions.Add(new RowDefinition());
             g.RowDefinitions[0].Height = GridLength.Auto;
-            g.RowDefinitions[1].Height = GridLength.Auto;
+            g.RowDefinitions[1].Height = new GridLength(1, GridUnitType.Star);
+            g.RowDefinitions[2].Height = GridLength.Auto;
+            g.RowDefinitions[3].Height = GridLength.Auto;
 
             navList = new StackPanel();
             TextBlock planLabel = Ui.Txt("奉 天 承 运", 11, Theme.B(Theme.TextOnWoodFaint), true);
@@ -282,10 +292,126 @@ namespace TimePlanner.App
 
             sideFoot = new StackPanel();
             sideFoot.VerticalAlignment = VerticalAlignment.Bottom;
-            Grid.SetRow(sideFoot, 1);
+            Grid.SetRow(sideFoot, 2);
             g.Children.Add(sideFoot);
+
+            Grid mascot = BuildMascot();
+            Grid.SetRow(mascot, 3);
+            g.Children.Add(mascot);
             side.Child = g;
             return side;
+        }
+
+        /// <summary>
+        /// 侧栏左下角的小人 + 他的对话框：常驻，随时报一句今日进展；
+        /// 点他一下会换一句贺辞，过一会儿自己回到进展那句。
+        /// </summary>
+        Grid BuildMascot()
+        {
+            Grid band = new Grid();
+            band.Margin = new Thickness(0, 10, 0, 0);
+            band.RowDefinitions.Add(new RowDefinition());
+            band.RowDefinitions.Add(new RowDefinition());
+            band.RowDefinitions[0].Height = GridLength.Auto;
+
+            Grid head = new Grid();
+            head.RowDefinitions.Add(new RowDefinition());
+            head.RowDefinitions.Add(new RowDefinition());
+            head.RowDefinitions[0].Height = GridLength.Auto;
+            head.RowDefinitions[1].Height = new GridLength(10);
+
+            mascotBox = Ui.Round(8, Theme.B(Theme.Ivory), Theme.B(Theme.IvoryLine), 1.3);
+            mascotBox.Padding = new Thickness(10, 6, 10, 7);
+            mascotBox.HorizontalAlignment = HorizontalAlignment.Left;
+            mascotBox.MaxWidth = 192;
+            mascotBox.RenderTransformOrigin = new Point(0.2, 1);
+            StackPanel lines = new StackPanel();
+            mascotLine = MascotLine();
+            mascotText = Ui.Txt(mascotLine, 12.5, Theme.B(Theme.TextMuted), true);
+            mascotText.FontFamily = Theme.FontTitle;
+            mascotText.TextWrapping = TextWrapping.Wrap;
+            lines.Children.Add(mascotText);
+            mascotSign = Ui.Txt(Fireworks.CheerSign, 10, Theme.B(Theme.TextFaint), false);
+            mascotSign.HorizontalAlignment = HorizontalAlignment.Right;
+            mascotSign.Margin = new Thickness(0, 2, 0, 0);
+            mascotSign.Visibility = Visibility.Collapsed;
+            lines.Children.Add(mascotSign);
+            mascotBox.Child = lines;
+            head.Children.Add(mascotBox);
+
+            Path tail = new Path();
+            tail.Data = Geometry.Parse("M0,0 L12,0 L6,10 Z");
+            tail.Stretch = Stretch.Fill;
+            tail.Width = 12;
+            tail.Height = 10;
+            tail.Fill = Theme.B(Theme.Ivory);
+            tail.Stroke = Theme.B(Theme.IvoryLine);
+            tail.StrokeThickness = 1.1;
+            tail.HorizontalAlignment = HorizontalAlignment.Left;
+            tail.Margin = new Thickness(22, -1, 0, 0);
+            Grid.SetRow(tail, 1);
+            head.Children.Add(tail);
+            Grid.SetRow(head, 0);
+            band.Children.Add(head);
+
+            FrameworkElement man = Ui.Minister(88);
+            man.HorizontalAlignment = HorizontalAlignment.Left;
+            man.Margin = new Thickness(0, -4, 0, 0);
+            man.Cursor = Cursors.Hand;
+            man.MouseLeftButtonUp += delegate(object s, MouseButtonEventArgs e) { SayCheer(Fireworks.PickCheer()); };
+            Ui.Tip(man, "点小人一下，他有话说");
+            Grid.SetRow(man, 1);
+            band.Children.Add(man);
+            return band;
+        }
+
+        /// <summary>小人那句话：跟着今天办了多少事走。</summary>
+        string MascotLine()
+        {
+            List<TaskItem> list = TaskQuery.ForDay(Store.Data.Tasks, DateTime.Today);
+            int done = 0;
+            for (int i = 0; i < list.Count; i++) if (list[i].Done) done++;
+            if (list.Count == 0) return "今日无事，臣候旨";
+            if (done >= list.Count) return "诸事皆了，臣恭贺圣上";
+            return string.Format("尚余 {0} 事，臣这就办", list.Count - done);
+        }
+
+        /// <summary>每次刷新对一下那句话；变了就弹一下，像他在报告进展。</summary>
+        void PaintMascot()
+        {
+            if (mascotText == null || mascotCheer != null) return;
+            string line = MascotLine();
+            if (line == mascotLine) return;
+            mascotLine = line;
+            mascotText.Text = line;
+            mascotText.Foreground = Theme.B(Theme.TextMuted);
+            if (mascotSign != null) mascotSign.Visibility = Visibility.Collapsed;
+            Ui.PopIn(mascotBox, 0.9);
+        }
+
+        /// <summary>让小人说一句贺辞，过一会儿自己回到那句进展。</summary>
+        void SayCheer(string text)
+        {
+            if (mascotText == null || string.IsNullOrEmpty(text)) return;
+            mascotCheer = text;
+            mascotText.Text = text;
+            mascotText.Foreground = Theme.B(Theme.IvoryInk);
+            if (mascotSign != null) mascotSign.Visibility = Visibility.Visible;
+            Ui.PopIn(mascotBox, 0.86);
+            if (mascotTimer == null)
+            {
+                mascotTimer = new DispatcherTimer();
+                mascotTimer.Interval = TimeSpan.FromSeconds(7);
+                mascotTimer.Tick += delegate(object s, EventArgs e)
+                {
+                    mascotTimer.Stop();
+                    mascotCheer = null;
+                    mascotLine = "";                 // 逼着下面重新写一遍进展
+                    PaintMascot();
+                };
+            }
+            mascotTimer.Stop();
+            mascotTimer.Start();
         }
 
         Border NavItem(string key, string icon, string label)
@@ -436,6 +562,7 @@ namespace TimePlanner.App
             bool addFocused = AddBox != null && AddBox.Box.IsKeyboardFocusWithin;
             PaintNav();
             PaintSideFoot();
+            PaintMascot();
             RememberScroll();
 
             UIElement body;

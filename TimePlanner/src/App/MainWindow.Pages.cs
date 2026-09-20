@@ -89,10 +89,12 @@ namespace TimePlanner.App
             pageActions.Children.Add(NavArrow("right", delegate() { DayAnchor = day.AddDays(1); Refresh(); }, null));
             if (open.Count > 0)
             {
-                Border defer = Ui.TextButton("未竟之事，顺延明日", delegate()
+                Border defer = Ui.TextButton("今日事明日毕", delegate()
                 {
-                    Store.Defer(day, day.AddDays(1));
+                    // 先换锚点再动数据：Store 改完会立刻通知重排，
+                    // 锚点没换的话这一下刷的还是今天（已经空了的那天）。
                     DayAnchor = day.AddDays(1);
+                    Store.Defer(day, day.AddDays(1));
                 }, false);
                 defer.Margin = new Thickness(10, 0, 0, 0);
                 pageActions.Children.Add(defer);

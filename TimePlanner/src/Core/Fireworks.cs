@@ -17,22 +17,28 @@ namespace TimePlanner.Core
     {
         static readonly Random Rnd = new Random();
 
-        /// <summary>完成一条任务时，左下角小人替圣上挑一句贺辞。</summary>
+        /// <summary>完成一条任务时，左下角这位臣子挑一句贺辞（34 句）。</summary>
         public static readonly string[] Cheers = new string[]
         {
-            "办得漂亮，朕心甚慰", "此事既了，甚合朕意", "卿甚合朕意", "好，朕准了",
-            "爱卿辛苦，朕记你一功", "又了一桩心事", "如此勤勉，朕放心", "好好好，就这么办",
-            "朕看好你", "事无大小，办妥便佳"
+            "臣恭喜圣上，又了却一桩", "臣恭贺圣上", "贺喜圣上，此事已成", "恭喜圣上，又办妥一件",
+            "臣为圣上贺", "圣上英明，此事已了", "臣恭贺圣上，心愿又了", "恭喜圣上，诸事顺遂",
+            "贺喜圣上，一日千里", "臣恭祝圣上，事事如意", "圣上勤政，臣敬佩", "恭喜圣上，又进一步",
+            "臣贺圣上，此事圆满", "贺喜贺喜，又办成一事", "臣恭贺，圣上辛苦了", "恭喜圣上，真乃好彩",
+            "臣为圣上贺，此事妥当", "圣上神速，臣叹服", "恭喜圣上，所愿皆成", "臣恭贺圣上，功不唐捐",
+            "贺喜圣上，又添一功", "恭喜圣上，步步高升", "臣贺圣上，事事有成", "圣上辛劳，臣恭贺",
+            "恭喜圣上，又清一事", "臣为圣上贺，心境清明", "贺喜圣上，日益精进", "恭喜圣上，又得一分",
+            "臣恭贺，圣上真勤勉", "贺喜圣上，此桩已了", "臣恭贺圣上，福气绵长", "恭喜圣上，诸般皆顺",
+            "圣上如此勤勉，臣恭贺", "臣贺喜圣上，心愿得偿"
         };
 
-        /// <summary>当天任务全部完成时，小人说的是这句。</summary>
-        public const string AllDone = "今日诸事皆了，朕心大悦";
+        /// <summary>当天任务全部完成时，他说的是这句。</summary>
+        public const string AllDone = "诸事皆了，臣恭贺圣上";
 
-        /// <summary>没事的时候小人挂在嘴边的一句。</summary>
-        public const string Silent = "朕在此候着";
+        /// <summary>没事的时候他挂在嘴边的一句。</summary>
+        public const string Silent = "臣在此候旨";
 
         /// <summary>贺辞的落款。</summary>
-        public const string CheerSign = "—— 钦 此";
+        public const string CheerSign = "—— 臣 恭 贺";
 
         static Geometry _ribbon;
         static Geometry _tail;

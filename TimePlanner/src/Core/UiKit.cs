@@ -319,6 +319,42 @@ namespace TimePlanner.Core
             return e;
         }
 
+        /// <summary>左下角的小人：透明底 PNG 按原始比例（306:495）摆，缩放用高保真插值。</summary>
+        public static FrameworkElement Minister(double width)
+        {
+            Image img = new Image();
+            img.Source = Art.Minister();
+            img.Stretch = Stretch.Uniform;
+            img.Width = width;
+            img.Height = width * 495.0 / 306.0;
+            img.SnapsToDevicePixels = true;
+            RenderOptions.SetBitmapScalingMode(img, BitmapScalingMode.HighQuality);
+            if (img.Source == null) img.Visibility = Visibility.Collapsed;
+            return img;
+        }
+
+        /// <summary>
+        /// 从尾巴那侧轻轻弹出来：只动缩放和透明度，半透明桌面窗口上这比任何特效都便宜。
+        /// 用 FillBehavior.Stop（元素本身已设成终值），动画跑完不留时钟。
+        /// </summary>
+        public static void PopIn(FrameworkElement el, double fromScale)
+        {
+            if (el == null) return;
+            ScaleTransform sc = new ScaleTransform(1, 1);
+            el.RenderTransform = sc;
+            BackEase pop = new BackEase();
+            pop.EasingMode = EasingMode.EaseOut;
+            pop.Amplitude = 0.55;
+            DoubleAnimation grow = new DoubleAnimation(fromScale, 1, TimeSpan.FromMilliseconds(300));
+            grow.EasingFunction = pop;
+            grow.FillBehavior = FillBehavior.Stop;
+            sc.BeginAnimation(ScaleTransform.ScaleXProperty, grow);
+            sc.BeginAnimation(ScaleTransform.ScaleYProperty, grow);
+            DoubleAnimation fade = new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(170));
+            fade.FillBehavior = FillBehavior.Stop;
+            el.BeginAnimation(UIElement.OpacityProperty, fade);
+        }
+
         static Brush _silk;
         static Brush _wood;
 

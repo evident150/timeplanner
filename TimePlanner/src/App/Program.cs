@@ -10,6 +10,7 @@ namespace TimePlanner.App
     public static class Program
     {
         static Mutex instanceMutex;
+        static EventWaitHandle showSignal;
         static Store store;
         static MainWindow window;
         static TrayIcon tray;
@@ -35,6 +36,9 @@ namespace TimePlanner.App
                 return;
             }
 
+            // 先把信号灯挂上：主程序多半时间缩在托盘里，插件要叫它显形只能靠这个。
+            showSignal = AppSignal.Create();
+
             Diagnostics.HookCrash();
             Diagnostics.WatchUi();
             store = new Store();
@@ -57,6 +61,7 @@ namespace TimePlanner.App
             window = new MainWindow(store, trayOnly);
             window.Show();
             if (trayOnly) window.Hide();
+            AppSignal.Pump(showSignal, delegate() { DispatchShowMain(); });
 
             tray = new TrayIcon(store, window, delegate() { ShowMain(); }, delegate(bool all) { Exit(all); });
             ScheduleTrim();
@@ -100,6 +105,15 @@ namespace TimePlanner.App
             t.Start();
         }
 
+        /// <summary>信号是后台线程收的，显形得回 UI 线程做。</summary>
+        static void DispatchShowMain()
+        {
+            MainWindow w = window;
+            if (w == null) return;
+            try { w.Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Normal, new Action(delegate() { ShowMain(); })); }
+            catch (Exception) { }
+        }
+
         static void ShowMain()
         {
             if (window == null) return;
@@ -120,6 +134,9 @@ namespace TimePlanner.App
 
         static void ActivateExisting()
         {
+            // 主程序可能正缩在托盘里，这时它的主窗口句柄是 0，按句柄找不着。
+            // 信号灯靠谱得多，先按一下；主程序是老版本（不认识这盏灯）再退回原来的办法。
+            if (AppSignal.RequestShow()) return;
             try
             {
                 Process cur = Process.GetCurrentProcess();

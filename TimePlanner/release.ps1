@@ -120,6 +120,18 @@ foreach ($f in @("TimePlanner.exe", "TimePlanner.Widget.exe", "使用说明.txt"
 }
 Write-Host ("  铺出 outputs\" + $name)
 
+# ---------- 5.5 刷新仓库里的免编译目录 exe\（GitHub 上直接下载就能跑，不用编译） ----------
+$exeDir = Join-Path $root "exe"
+if (-not (Test-Path -LiteralPath $exeDir)) { New-Item -ItemType Directory -Force -Path $exeDir | Out-Null }
+$exeFiles = 0
+foreach ($f in @("TimePlanner.exe", "TimePlanner.Widget.exe", "使用说明.txt", "启动时间规划.cmd")) {
+    $src = Join-Path $dist $f
+    if (-not (Test-Path -LiteralPath $src)) { Write-Warning ("    缺文件：" + $f); continue }
+    Copy-Item -LiteralPath $src -Destination (Join-Path $exeDir $f) -Force
+    $exeFiles++
+}
+Write-Host ("  刷新 exe\（" + $exeFiles + " 个文件，免编译包）")
+
 # ---------- 6. 打包 ----------
 Push-Location $outDir
 & tar.exe -a -c -f (Join-Path $outputs $appZip) README.md TimePlanner.exe TimePlanner.Widget.exe 使用说明.txt 启动时间规划.cmd

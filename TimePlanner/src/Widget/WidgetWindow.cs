@@ -232,6 +232,7 @@ namespace TimePlanner.Widget
             miNormal = MenuSkin.Add(menu, "winmax", "普通窗口", delegate() { SetMode("normal"); }, false, false);
             MenuSkin.Line(menu);
             miToday = MenuSkin.Add(menu, "calendar", "只显示今天", delegate() { day = DateTime.Today; Refresh(); }, false, false);
+            MenuSkin.Add(menu, "arrow-right", "今日事明日毕", delegate() { DeferAll(); }, false, false);
             MenuSkin.Add(menu, "expand", "恢复自适应大小", delegate()
             {
                 store.UpdateSettings(delegate(Settings s2) { s2.WidgetWidth = 0; s2.WidgetHeight = 0; });
@@ -253,6 +254,15 @@ namespace TimePlanner.Widget
             if (miTopmost != null) miTopmost.SetActive(mode == "topmost");
             if (miNormal != null) miNormal.SetActive(mode == "normal");
             if (miToday != null) miToday.SetActive(day.Date == DateTime.Today);
+        }
+
+        /// <summary>今日事明日毕：把这一天的未竟之事整体挪到第二天，顺便跟过去看看落哪儿了。</summary>
+        void DeferAll()
+        {
+            DateTime from = day.Date;
+            day = from.AddDays(1);
+            store.Defer(from, day);
+            AnimatedRefresh();
         }
 
         Border BuildHeader()
@@ -322,7 +332,7 @@ namespace TimePlanner.Widget
         {
             weekStrip = new Grid();
             for (int i = 0; i < 7; i++) weekStrip.ColumnDefinitions.Add(new ColumnDefinition());
-            weekStrip.Margin = new Thickness(0, 0, 0, 12);
+            weekStrip.Margin = new Thickness(0, 0, 0, 10);
             Border wrap = new Border();
             wrap.Child = weekStrip;
             return wrap;
@@ -404,7 +414,7 @@ namespace TimePlanner.Widget
 
         /// <summary>
         /// 左下角的小人 + 他说的话。独自占页脚最后一行，压不到上面任何文字；
-        /// 没事的时候嘴里挂一句「朕在此候着」，完成任务时换成贺辞。
+        /// 没事的时候嘴里挂一句「臣在此候旨」，完成任务时换成贺辞。
         /// </summary>
         Grid BuildMinister()
         {
@@ -415,9 +425,11 @@ namespace TimePlanner.Widget
             band.ColumnDefinitions.Add(left);
             band.ColumnDefinitions.Add(new ColumnDefinition());
 
-            minister = MinisterArt(78);
+            minister = Ui.Minister(78);
             minister.VerticalAlignment = VerticalAlignment.Bottom;
-            Ui.Tip(minister, "左下角这位：办成一件事，他就有话讲");
+            minister.Cursor = Cursors.Hand;
+            minister.MouseLeftButtonUp += delegate(object s, MouseButtonEventArgs e) { Say(Fireworks.PickCheer()); };
+            Ui.Tip(minister, "点小人一下，他有话说");
             Grid.SetColumn(minister, 0);
             band.Children.Add(minister);
 
@@ -462,20 +474,6 @@ namespace TimePlanner.Widget
             return band;
         }
 
-        /// <summary>小人本体：透明底 PNG，按原始比例摆，缩放时高保真插值。</summary>
-        FrameworkElement MinisterArt(double width)
-        {
-            Image img = new Image();
-            img.Source = Art.Minister();
-            img.Stretch = Stretch.Uniform;
-            img.Width = width;
-            img.Height = width * 495.0 / 306.0;
-            img.SnapsToDevicePixels = true;
-            RenderOptions.SetBitmapScalingMode(img, BitmapScalingMode.HighQuality);
-            if (img.Source == null) img.Visibility = Visibility.Collapsed;
-            return img;
-        }
-
         /// <summary>小人开口说一句：对话框弹一下，过一会儿自己回到「候着」。</summary>
         void Say(string text)
         {
@@ -483,7 +481,7 @@ namespace TimePlanner.Widget
             bubbleText.Text = text;
             bubbleText.Foreground = Theme.B(Theme.IvoryInk);
             if (bubbleSign != null) bubbleSign.Visibility = Visibility.Visible;
-            PopBubble();
+            Ui.PopIn(bubbleBox, 0.86);
             if (bubbleTimer == null)
             {
                 bubbleTimer = new DispatcherTimer();
@@ -505,25 +503,6 @@ namespace TimePlanner.Widget
             bubbleText.Text = Fireworks.Silent;
             bubbleText.Foreground = Theme.B(Theme.TextFaint);
             if (bubbleSign != null) bubbleSign.Visibility = Visibility.Collapsed;
-        }
-
-        /// <summary>对话框从尾巴那侧轻轻弹出来（只动缩放和透明度，桌面插件上很便宜）。</summary>
-        void PopBubble()
-        {
-            if (bubbleBox == null) return;
-            ScaleTransform sc = new ScaleTransform(1, 1);
-            bubbleBox.RenderTransform = sc;
-            BackEase pop = new BackEase();
-            pop.EasingMode = EasingMode.EaseOut;
-            pop.Amplitude = 0.55;
-            DoubleAnimation grow = new DoubleAnimation(0.86, 1, TimeSpan.FromMilliseconds(300));
-            grow.EasingFunction = pop;
-            grow.FillBehavior = FillBehavior.Stop;
-            sc.BeginAnimation(ScaleTransform.ScaleXProperty, grow);
-            sc.BeginAnimation(ScaleTransform.ScaleYProperty, grow);
-            DoubleAnimation fade = new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(170));
-            fade.FillBehavior = FillBehavior.Stop;
-            bubbleBox.BeginAnimation(UIElement.OpacityProperty, fade);
         }
 
         // ---------------- 拖边缘缩放 ----------------
@@ -807,20 +786,29 @@ namespace TimePlanner.Widget
                 bool sel = wd.Date == d;
                 bool today = wd.Date == DateTime.Today;
 
-                Border cell = Ui.Round(8, Theme.B(sel ? Theme.Accent : Colors.Transparent),
-                    Theme.B(today && !sel ? Theme.Alpha(Theme.Accent, 0.55) : Colors.Transparent), 1);
-                cell.Height = 34;
+                // 一格两行：上面周几、下面日期数字；今天描红，选中的那天填朱砂
+                Color fg = sel ? Theme.OnAccent : (today ? Theme.Accent : Theme.Ink);
+                Color fgSoft = sel ? Theme.OnAccent : (today ? Theme.Accent : Theme.TextFaint);
+                Color edge = sel ? Theme.Accent : (today ? Theme.Alpha(Theme.Accent, 0.62) : Theme.Alpha(Theme.Border, 0.65));
+                Border cell = Ui.Round(7,
+                    Theme.B(sel ? Theme.Accent : (today ? Theme.Alpha(Theme.Accent, 0.12) : Colors.Transparent)),
+                    Theme.B(edge), 1);
+                cell.Height = 40;
                 cell.Margin = new Thickness(i == 0 ? 0 : 3, 0, 0, 0);
                 cell.HorizontalAlignment = HorizontalAlignment.Stretch;
                 StackPanel cs = new StackPanel();
                 cs.VerticalAlignment = VerticalAlignment.Center;
-                TextBlock wdLabel = Ui.Txt(Fmt.Weekday(wd).Substring(1), 11.5, Theme.B(sel ? Theme.OnAccent : (today ? Theme.Accent : Theme.TextFaint)), sel || today);
+                TextBlock wdLabel = Ui.Txt(Fmt.Weekday(wd).Substring(1), 9.5, Theme.B(fgSoft), false);
                 wdLabel.HorizontalAlignment = HorizontalAlignment.Center;
                 cs.Children.Add(wdLabel);
+                TextBlock dayNum = Ui.Txt(wd.Day.ToString(), 12.5, Theme.B(fg), sel || today);
+                dayNum.HorizontalAlignment = HorizontalAlignment.Center;
+                dayNum.Margin = new Thickness(0, 1, 0, 0);
+                cs.Children.Add(dayNum);
                 Ellipse dot = new Ellipse();
-                dot.Width = 4;
-                dot.Height = 4;
-                dot.Margin = new Thickness(0, 3, 0, 0);
+                dot.Width = 3.5;
+                dot.Height = 3.5;
+                dot.Margin = new Thickness(0, 2, 0, 0);
                 dot.HorizontalAlignment = HorizontalAlignment.Center;
                 if (list.Count == 0) dot.Fill = Theme.B(Colors.Transparent);
                 else if (dn == list.Count) dot.Fill = Theme.B(Theme.Success);
@@ -829,7 +817,7 @@ namespace TimePlanner.Widget
                 cell.Child = cs;
                 DateTime target = wd;
                 Ui.Click(cell, delegate() { day = target; Refresh(); }, Theme.B(Theme.PanelHi), cell.Background as SolidColorBrush);
-                Ui.Tip(cell, string.Format("{0} · {1} 项任务", Fmt.DateCN(wd), list.Count));
+                Ui.Tip(cell, string.Format("{0} {1} · 已竟 {2} / {3} 事", Fmt.DateCN(wd), Fmt.Weekday(wd), dn, list.Count));
                 Grid.SetColumn(cell, i);
                 weekStrip.Children.Add(cell);
             }
@@ -1043,6 +1031,10 @@ namespace TimePlanner.Widget
                         return;
                     }
                 }
+                // 走到这儿说明主程序要么缩在托盘里（窗口一 Hide，MainWindowHandle 就是 0），
+                // 要么根本没开。前者按句柄找不到人，得靠信号灯把它叫醒；
+                // 信号灯没挂上（没在跑，或者是老版本主程序）就按老办法重新拉一个起来。
+                if (AppSignal.RequestShow()) return;
                 string exe = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "TimePlanner.exe");
                 if (System.IO.File.Exists(exe)) Process.Start(exe);
             }
