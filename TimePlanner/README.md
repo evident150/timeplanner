@@ -164,7 +164,7 @@
 ## 两条产品线与更新日志
 
 - **特别版**（主线 `main`）：圣旨皮肤 + 小人，序列 1.6 → 1.7 → sp1 → sp2 …（1.8 就是 sp1），
-  标签 `special/sp<n>`（1.6、1.7 还是 `special/v1.6`、`special/v1.7`），交付物 `TimePlanner-sp<n>-special`。
+  标签 `special/sp<n>`（1.6、1.7 还是 `special/v1.6`、`special/v1.7`），交付物 `TimePlanner-sp<n>-special`；当前最新是 `sp1`。
 - **经典版**：1.5 那套深色卡片界面，没有圣旨皮肤和小人，序列 1.5 → 1.5.1 → 1.5.2 …，
   标签 `classic/v<版本>`（旧名 `v1.5`），交付物 `TimePlanner-<版本>-classic`。
 - 这台电脑上的改动**先在经典版生效**：改完就跑 `sync-classic.ps1` 同步内核与 `[需要移植]` 的界面改动，

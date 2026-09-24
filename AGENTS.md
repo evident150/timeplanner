@@ -35,11 +35,15 @@
 - 标题写清楚是哪条线（「特别版 sp1」/「经典版 1.5.1」），正文贴上 `CHANGELOG.md` 里对应那段。
 - 建发行版时按版本从低到高建，最后一条就是「最新」；或显式给 `make_latest`。
 - 旧标签 `v1.5` 别删（发行版和外面的链接还指着它）；`v1.6` / `v1.7` 已经改名成
-  `special/v1.6` / `special/v1.7`，推新版时顺手把远端这两个旧名字也删掉：
-  `git push origin :refs/tags/v1.6 :refs/tags/v1.7`。
+  `special/v1.6` / `special/v1.7`：**2026-09-24 已经办完** —— 远端旧名删了
+  （`git push origin :refs/tags/v1.6 :refs/tags/v1.7`），那两条老发行版也 PATCH 成新标签名了，
+  远端现在只有 `v1.5`、`classic/v1.5.2`、`special/sp1`、`special/v1.6`、`special/v1.7`。
+  以后再改标签名，记得把指着它的发行版一起 PATCH 过去，别让发行版悬空。
 
 ## 两条产品线（版本隔离）
 
+- **当前版本（2026-09-24）**：特别版最新 `sp1`（标签 `special/sp1`，交付物 `TimePlanner-sp1-special-app.zip`，
+  也是 GitHub 上的「最新」）；经典版最新 `1.5.2`（标签 `classic/v1.5.2`，交付物 `TimePlanner-1.5.2-classic.zip`）。
 - **两条线、两个版本序列，各走各的**：
   **特别版**（本仓库主线 `main`）= 圣旨皮肤 + 小人，序列 1.6 → 1.7 → sp1 → sp2 …（1.8 就是 sp1），
   标签 `special/sp<n>`（1.6、1.7 那两个老标签还是 `special/v1.6`、`special/v1.7`），
