@@ -8,7 +8,7 @@ Windows 桌面上的时间规划小工具：一个**主程序**用来规划今�
 
 两条路，都不用编译：
 
-- **发行版（Releases）**：[`1.7 特别版`](https://github.com/evident150/timeplanner/releases/latest) 里直接下 `TimePlanner-1.7-app.zip`，解压双击就能用；历史上每一版（含经典版那条线的 [`1.5 经典版`](https://github.com/evident150/timeplanner/releases/tag/v1.5)）都在[发行版列表](https://github.com/evident150/timeplanner/releases)里。特别版从 1.8 起改用 `sp<n>` 编号（1.8 就是 `sp1`），交付物叫 `TimePlanner-<版本>-special-app.zip`
+- **发行版（Releases）**：[`1.7 特别版`](https://github.com/evident150/timeplanner/releases/latest) 里直接下 `TimePlanner-1.7-app.zip`，解压双击就能用；经典版那条线最新是 [`1.5.2 经典版`](https://github.com/evident150/timeplanner/releases/tag/classic/v1.5.2)（带 `TimePlanner-1.5.2-classic.zip`），起点是 [`1.5 经典版`](https://github.com/evident150/timeplanner/releases/tag/v1.5)；历史上每一版都在[发行版列表](https://github.com/evident150/timeplanner/releases)里。特别版从 1.8 起改用 `sp<n>` 编号（1.8 就是 `sp1`），交付物叫 `TimePlanner-<版本>-special-app.zip`
 - **仓库里的 [`exe/`](exe/) 目录**：**当前版本**的免编译包（每次发版由 `release.ps1` 自动刷新），点进去单独下两个 exe 也行
 
 `exe/` 里是这些：
@@ -55,16 +55,17 @@ Windows 桌面上的时间规划小工具：一个**主程序**用来规划今�
 | 线 | 界面 | 版本序列 | 标签 | 交付物 |
 | --- | --- | --- | --- | --- |
 | **特别版** | 圣旨皮肤 + 小人（1.6 起） | 1.6 → 1.7 → sp1 → sp2 … | `special/sp<n>` | `TimePlanner-sp<n>-special` |
-| **经典版** | 1.5 那套深色卡片 | 1.5 → 1.5.1 … | `classic/v<版本>` | `TimePlanner-<版本>-classic` |
+| **经典版** | 1.5 那套深色卡片 | 1.5 → 1.5.1 → 1.5.2 … | `classic/v<版本>` | `TimePlanner-<版本>-classic` |
 
 | 标签 | 版本 | 说明 |
 | --- | --- | --- |
 | `special/v1.7` | 特别版 1.7（当前） | 圣旨皮肤 + 主程序与插件都有小人；新增「今日事明日毕」，修好插件右键「打开主程序」 |
 | `special/v1.6` | 特别版 1.6 | 整套界面换成圣旨皮肤，插件左下角小人开口说话 |
+| `classic/v1.5.2` | 经典版 1.5.2（当前） | 写盘失败会写日志 + 侧栏亮红字、每次写盘留快照（改动不再无声无息丢）；项目档案（大项目 / 分段 / 小项目）、大项目按份记进度、插件上按 1 份一勾 |
 | `classic/v1.5` | 经典版 1.5（旧名 `v1.5`） | 经典版序列的起点：深色界面，没有圣旨皮肤和小人 |
 
 每个版本在 [发行版](https://github.com/evident150/timeplanner/releases) 里都有一条：`1.7 特别版` 带免编译附件，
-`1.5 经典版` 带 `TimePlanner-1.5-classic.zip`（解压即用），`1.6` 只带源码。想看旧界面就下 `1.5`。
+`1.5.2 经典版` 带 `TimePlanner-1.5.2-classic.zip`、`1.5 经典版` 带 `TimePlanner-1.5-classic.zip`（都解压即用），`1.6` 只带源码。深色卡片那条线就下最新的 `1.5.2`。
 按标签下载也能拿到源码快照（GitHub 上 `Code → Download ZIP` 只给主线最新版）。
 标签改名（`v1.6` / `v1.7` → `special/v1.6`、`special/v1.7`）会在下次推版本时一并同步到 GitHub。
 特别版从 1.8 起改用 `sp<n>` 编号（1.8 就是 `sp1`，标签 `special/sp1`，往后 `sp2` …）；1.6、1.7 保持原名。
