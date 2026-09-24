@@ -29,7 +29,7 @@ namespace TimePlanner.App
             }
 
             bool createdNew;
-            instanceMutex = new Mutex(true, @"Local\TimePlanner.App.SingleInstance", out createdNew);
+            instanceMutex = new Mutex(true, Install.AppMutex, out createdNew);
             if (!createdNew)
             {
                 ActivateExisting();
@@ -37,7 +37,7 @@ namespace TimePlanner.App
             }
 
             // 先把信号灯挂上：主程序多半时间缩在托盘里，插件要叫它显形只能靠这个。
-            showSignal = AppSignal.Create();
+            showSignal = AppSignal.Create(AppSignal.ShowMain);
 
             Diagnostics.HookCrash();
             Diagnostics.WatchUi();
@@ -136,14 +136,13 @@ namespace TimePlanner.App
         {
             // 主程序可能正缩在托盘里，这时它的主窗口句柄是 0，按句柄找不着。
             // 信号灯靠谱得多，先按一下；主程序是老版本（不认识这盏灯）再退回原来的办法。
-            if (AppSignal.RequestShow()) return;
+            if (AppSignal.Request(AppSignal.ShowMain)) return;
             try
             {
-                Process cur = Process.GetCurrentProcess();
-                Process[] all = Process.GetProcessesByName(cur.ProcessName);
+                // 只看这一份安装里的同名进程：别的版本目录里的主程序不归我叫唤。
+                Process[] all = Install.Siblings(Process.GetCurrentProcess().ProcessName);
                 for (int i = 0; i < all.Length; i++)
                 {
-                    if (all[i].Id == cur.Id) continue;
                     IntPtr h = all[i].MainWindowHandle;
                     if (h != IntPtr.Zero)
                     {
@@ -268,7 +267,7 @@ namespace TimePlanner.App
         {
             if ((DateTime.Now - runningChecked).TotalSeconds < 2) return runningCache;
             runningChecked = DateTime.Now;
-            try { runningCache = Process.GetProcessesByName("TimePlanner.Widget").Length > 0; }
+            try { runningCache = Install.Siblings("TimePlanner.Widget").Length > 0; }
             catch (Exception) { runningCache = false; }
             return runningCache;
         }
@@ -304,7 +303,8 @@ namespace TimePlanner.App
         {
             try
             {
-                Process[] all = Process.GetProcessesByName("TimePlanner.Widget");
+                // 只关自己这份安装的插件：别的版本目录里的插件由它自己那份主程序管。
+                Process[] all = Install.Siblings("TimePlanner.Widget");
                 for (int i = 0; i < all.Length; i++)
                 {
                     try
@@ -337,8 +337,11 @@ namespace TimePlanner.App
         static void LoadDemo(Store store)
         {
             store.Data.Tasks.Clear();
+            if (store.Data.Projects == null) store.Data.Projects = new System.Collections.Generic.List<ProjectNode>();
+            store.Data.Projects.Clear();
             DateTime today = DateTime.Today;
             DateTime mon = TaskQuery.WeekStart(today, true);
+            AddDemo(store, "把上周末没写完的方案收个尾", today.AddDays(-1), 1, "工作", false);
             AddDemo(store, "整理季度汇报的框架和关键数据", today, 2, "工作", false);
             AddDemo(store, "和产品同步下周排期", today, 1, "工作", false);
             AddDemo(store, "读 30 页《深度工作》", today, 0, "学习", false);
@@ -350,6 +353,31 @@ namespace TimePlanner.App
             AddDemo(store, "英语口语练习 20 分钟", mon.AddDays(2), 0, "学习", false);
             AddDemo(store, "陪家人看电影", mon.AddDays(4), 0, "生活", false);
             AddDemo(store, "复盘本月目标完成情况", mon.AddDays(5), 1, "复盘", false);
+            LoadDemoProjects(store);
+        }
+
+        /// <summary>示例项目：一个大项目带分段，另一个直接挂小项目（小项目在数据里就是普通事项，截图里它和普通任务混在一列）。</summary>
+        static void LoadDemoProjects(Store store)
+        {
+            ProjectNode thesis = store.AddProject("", ProjectKind.Big, "毕业设计");
+            ProjectNode stage = store.AddProject(thesis.Id, ProjectKind.Stage, "开题阶段");
+            store.AddProject(stage.Id, ProjectKind.Sub, "查 20 篇相关文献 #论文 !");
+            ProjectNode draft = store.AddProject(stage.Id, ProjectKind.Sub, "写完开题报告初稿 #论文 !!");
+            // 大项目不写细目也能记进度：整个项目分成 8 份、已办 3 份（拖横条记的）
+            store.SetProjectSteps(thesis.Id, 8);
+            store.SetProjectReached(thesis.Id, 3);
+            store.AddProject(thesis.Id, ProjectKind.Sub, "和导师约一次面谈 #论文");
+
+            ProjectNode body = store.AddProject("", ProjectKind.Big, "体重管理");
+            ProjectNode aerobic = store.AddProject(body.Id, ProjectKind.Sub, "每周三次有氧 #生活");
+            store.AddProject(body.Id, ProjectKind.Sub, "把晚餐的碳水减半 #生活");
+
+            // 让一条小项目是「已竟」，进度上看得出来
+            TaskItem t = ProjectTree.ItemOf(store.Data, draft);
+            if (t != null) { t.Done = true; t.DoneAt = DateTime.Now.AddHours(-2); }
+            // 另一条挪到本周后半，看它和普通任务排在一起的样子
+            TaskItem t2 = ProjectTree.ItemOf(store.Data, aerobic);
+            if (t2 != null) t2.Date = TaskQuery.WeekStart(DateTime.Today, true).AddDays(3);
         }
 
         static void AddDemo(Store store, string title, DateTime day, int prio, string tag, bool done)
@@ -364,6 +392,9 @@ namespace TimePlanner.App
 
         public static void Run(string dir)
         {
+            // 渲染只为出截图：数据目录指到临时目录 + 内置示例数据，
+            // 连读都不读用户那份 data.json，免得把人家真实写在里面的计划渲染进要提交的截图。
+            Store.DataDirOverride = Install.PreviewDataDir;
             Store store = new Store();
             store.ReadOnly = true;
             store.Load();
@@ -381,7 +412,7 @@ namespace TimePlanner.App
             w.ShowInTaskbar = false;
             w.Show();
 
-            string[] pages = new string[] { "today", "week", "done", "settings" };
+            string[] pages = new string[] { "today", "week", "project", "done", "settings" };
             for (int i = 0; i < pages.Length; i++)
             {
                 w.SelectPage(pages[i]);
@@ -396,6 +427,10 @@ namespace TimePlanner.App
             Preview.Capture(w, System.IO.Path.Combine(dir, "main-firework.png"), Theme.B(Theme.Bg));
             Preview.Settle(300);
             Preview.Capture(w, System.IO.Path.Combine(dir, "main-firework2.png"), Theme.B(Theme.Bg));
+
+            // 每张图都盖一枚「示例数据」角标
+            string[] shots = new string[] { "main-today.png", "main-week.png", "main-project.png", "main-done.png", "main-settings.png", "main-firework.png", "main-firework2.png" };
+            for (int i = 0; i < shots.Length; i++) Preview.Sample(System.IO.Path.Combine(dir, shots[i]));
 
             w.Hide();
             Console.WriteLine("rendered " + pages.Length + " pages to " + dir);

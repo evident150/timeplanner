@@ -74,6 +74,8 @@ namespace TimePlanner.App
             List<TaskItem> all = TaskQuery.ForDay(Store.Data.Tasks, day);
             List<TaskItem> open = all.Where(t => !t.Done).ToList();
             List<TaskItem> done = all.Where(t => t.Done).ToList();
+            // 压在过去的未竟之事：它们只是静静留在旧日期里，今天这页空空的，看着特别像「数据没了」。
+            List<TaskItem> overdue = Store.Data.Tasks.Where(t => !t.Done && t.Date.Date < day).ToList();
 
             pageTitle.Text = day == DateTime.Today ? "今 日 圣 旨" : Fmt.Relative(day) + " 之 圣 旨";
             pageSubtitle.Text = Fmt.Full(day) + string.Format("　·　共 {0} 事，已竟 {1} 事", all.Count, done.Count);
@@ -102,6 +104,30 @@ namespace TimePlanner.App
 
             StackPanel sp = new StackPanel();
             sp.Margin = new Thickness(26, 0, 26, 26);
+
+            // 旧日期里还压着没办完的事：明说一句，并给个一键顺延，免得看着像数据没了。
+            if (day == DateTime.Today && overdue.Count > 0)
+            {
+                Border late = Ui.Round(12, Theme.B(Theme.Alpha(Theme.Accent, 0.10)), Theme.B(Theme.Alpha(Theme.Accent, 0.42)), 1);
+                late.Padding = new Thickness(15, 9, 12, 9);
+                late.Margin = new Thickness(0, 0, 0, 14);
+                StackPanel row = new StackPanel();
+                row.Orientation = Orientation.Horizontal;
+                TextBlock lateTxt = Ui.Txt(string.Format("此前尚余 {0} 事未竟，还压在过去的日期里", overdue.Count),
+                    13, Theme.B(Theme.TextMuted), false);
+                lateTxt.VerticalAlignment = VerticalAlignment.Center;
+                row.Children.Add(lateTxt);
+                Border roll = Ui.Chip("全部挪到今天", true, delegate()
+                {
+                    DayAnchor = DateTime.Today;
+                    Store.RollOver(DateTime.Today, DateTime.Today);
+                }, Theme.Accent);
+                roll.Margin = new Thickness(12, 0, 0, 0);
+                roll.VerticalAlignment = VerticalAlignment.Center;
+                row.Children.Add(roll);
+                late.Child = row;
+                sp.Children.Add(late);
+            }
 
             // 进度
             Border progress = Ui.Round(14, Theme.B(Theme.Panel), Theme.B(Theme.Border), 1);
@@ -634,7 +660,20 @@ namespace TimePlanner.App
                 Store.UpdateSettings(delegate(Settings s2) { s2.AutoStart = on; });
                 DesktopInterop.SetAutoStart(on, System.Reflection.Assembly.GetEntryAssembly().Location);
             };
-            look.Children.Add(Cards.Row("开机自动启动", "登录后自动在托盘运行，并按设置显示桌面插件。", auto));
+            look.Children.Add(Cards.Row("开机自动启动", "登录后自动在托盘运行，并按设置显示桌面插件。本版本单独占一条自启，别的版本不受影响。", auto));
+
+            string[] otherAuto = DesktopInterop.OtherAutoStartNames();
+            if (otherAuto.Length > 0)
+            {
+                // 只提醒，不动别人的注册表：那是另一条产品线的开机自启，归它自己管。
+                StackPanel note = new StackPanel();
+                note.Orientation = Orientation.Horizontal;
+                TextBlock warn = Ui.Txt(string.Format("另有 {0} 个 TimePlanner 版本也设了开机自启", otherAuto.Length), 12, Theme.B(Theme.Warning), false);
+                warn.VerticalAlignment = VerticalAlignment.Center;
+                note.Children.Add(warn);
+                Ui.Tip(note, "登录时会一起起来的版本：" + string.Join("、", otherAuto) + "\n（想只留一个，就去那个版本的设置里关掉它的自启）");
+                look.Children.Add(Cards.Row("其它版本的自启", null, note));
+            }
             sp.Children.Add(Cards.Panel("外观与启动", null, look));
 
             // 数据
@@ -701,6 +740,384 @@ namespace TimePlanner.App
             double aim = o.X > fx.ActualWidth * 0.55 ? -148 : -32;
             Fireworks.Popper(fx, o, all ? 1.7 : 1.35, aim, Fireworks.PickCheer());
             if (all) Fireworks.Popper(fx, Ui.CenterOf(contentHost, fx), 1.9, -90, Fireworks.AllDone);
+        }
+
+        // ---------------- 项目档案 ----------------
+        //
+        // 三档结构：大项目（顶层容器）→ 分段（大项目内部的分期）/ 小项目（最低一级）。
+        // 小项目底下挂一条普通事项（TaskItem.ProjectId 指回节点），于是它天生就出现在
+        // 今日 / 本周 / 桌面插件里，和普通任务并排，勾选、拖动改期、顺延、礼花都走同一条路。
+
+        /// <summary>项目 / 分段整段办完时也放一筒礼花 —— 跟任务勾选同一个礼花筒、同一批鼓励语。</summary>
+        void CelebrateNode(FrameworkElement anchor)
+        {
+            if (fx == null || anchor == null) return;
+            Point o = Ui.CenterOf(anchor, fx);
+            double aim = o.X > fx.ActualWidth * 0.55 ? -148 : -32;
+            Fireworks.Popper(fx, o, 1.35, aim, Fireworks.PickCheer());
+        }
+
+        /// <summary>行上那句归属：这条小项目属于「大项目 / 分段」。</summary>
+        string ProjectLabelOf(TaskItem t)
+        {
+            if (t == null || t.ProjectId == null || t.ProjectId.Length == 0) return "";
+            ProjectNode n = ProjectTree.ById(Store.Data, t.ProjectId);
+            if (n == null) return "";
+            string path = ProjectTree.Path(Store.Data, n.ParentId, true);
+            if (path.Length == 0) return "";
+            return path.Length > 18 ? path.Substring(0, 17) + "…" : path;
+        }
+
+        UIElement BuildProjectPage()
+        {
+            AppData data = Store.Data;
+            List<ProjectNode> roots = ProjectTree.Roots(data);
+            int total;
+            int done;
+            ProjectTree.CountSubs(data, null, out total, out done);
+
+            pageTitle.Text = "项 目 档 案";
+            pageSubtitle.Text = roots.Count == 0
+                ? "尚无项目　·　先立一个大项目，再往里添小项目"
+                : string.Format("大项目 {0} 个　·　小项目 {1} 项，已竟 {2} 项", roots.Count, total, done);
+            pageActions.Children.Clear();
+            if (roots.Count > 0)
+            {
+                pageActions.Children.Add(Ui.TextButton("全部展开", delegate() { Store.SetAllProjectsOpen(true); }, false));
+                Border fold = Ui.TextButton("全部收起", delegate() { Store.SetAllProjectsOpen(false); }, false);
+                fold.Margin = new Thickness(8, 0, 0, 0);
+                pageActions.Children.Add(fold);
+            }
+
+            StackPanel sp = new StackPanel();
+            sp.Margin = new Thickness(26, 0, 26, 26);
+            sp.Children.Add(AddRowProject());
+
+            if (roots.Count == 0)
+            {
+                sp.Children.Add(EmptyState("layers", "还没有项目",
+                    "大项目是顶层容器，比如「毕业设计」；往里加小项目或分段，小项目就会和任务一起出现在桌面插件上"));
+                return Ui.Scroll(sp);
+            }
+
+            for (int i = 0; i < roots.Count; i++) sp.Children.Add(BuildProjectCard(roots[i], i, roots.Count));
+            return Ui.Scroll(sp);
+        }
+
+        /// <summary>顶上那个「新建大项目」输入框。</summary>
+        Border AddRowProject()
+        {
+            Border wrap = Ui.Round(11, Theme.B(Theme.Panel), Theme.B(Theme.Border), 1);
+            wrap.Padding = new Thickness(12, 9, 12, 10);
+            wrap.Margin = new Thickness(0, 0, 0, 16);
+
+            Grid g = new Grid();
+            ColumnDefinition c0 = new ColumnDefinition();
+            c0.Width = GridLength.Auto;
+            g.ColumnDefinitions.Add(c0);
+            g.ColumnDefinitions.Add(new ColumnDefinition());
+
+            Path plus = Ui.IconPath("plus", 13, Theme.B(Theme.Accent), 1.6);
+            plus.VerticalAlignment = VerticalAlignment.Center;
+            plus.Margin = new Thickness(0, 0, 9, 0);
+            Grid.SetColumn(plus, 0);
+            g.Children.Add(plus);
+
+            HintBox box = new HintBox("新建大项目：写下名目，回车即录　（如「毕业设计」）", 13);
+            box.VerticalAlignment = VerticalAlignment.Center;
+            box.Submitted = delegate(string text)
+            {
+                Store.AddProject("", ProjectKind.Big, text);
+                Refresh();
+            };
+            Grid.SetColumn(box, 1);
+            g.Children.Add(box);
+
+            wrap.Child = g;
+            return wrap;
+        }
+
+        /// <summary>一个大项目：表头一行 + 展开后的分段 / 小项目。</summary>
+        Border BuildProjectCard(ProjectNode n, int index, int total)
+        {
+            Border card = Ui.Round(13, Theme.B(Theme.Panel), Theme.B(Theme.Border), 1);
+            card.Padding = new Thickness(14, 11, 12, 12);
+            card.Margin = new Thickness(0, 0, 0, 12);
+
+            StackPanel body = new StackPanel();
+            body.Children.Add(ProjectRow(n, 0, index, total));
+
+            if (n.IsOpen)
+            {
+                List<ProjectNode> kids = ProjectTree.Children(Store.Data, n.Id);
+                if (kids.Count == 0 && projectAddParent != n.Id)
+                    body.Children.Add(ProjectHint("还没有下級：点 ＋ 添小项目、用「分段」把项目分期，或用 ⊖ ⊕ 直接把它分成几份（再拖横条记进度）", 28));
+                for (int i = 0; i < kids.Count; i++)
+                {
+                    ProjectNode kid = kids[i];
+                    if (kid.IsContainer) body.Children.Add(BuildStageBlock(kid, i, kids.Count));
+                    else body.Children.Add(ProjectSubRow(kid, 28));
+                }
+                if (projectAddParent == n.Id)
+                    body.Children.Add(ProjectComposer(n.Id, projectAddKind, null, null,
+                        projectAddKind == ProjectKind.Stage ? "分段名目，回车即录　（如「开题阶段」）" : "小项目名目，回车即录　（可写「查文献 #论文 !!」）", 28));
+            }
+            card.Child = body;
+            return card;
+        }
+
+        /// <summary>大项目里的分段：浅一层的一行 + 它下面那几条小项目。</summary>
+        UIElement BuildStageBlock(ProjectNode n, int index, int total)
+        {
+            StackPanel sp = new StackPanel();
+            sp.Children.Add(ProjectRow(n, 28, index, total));
+            if (n.IsOpen)
+            {
+                List<ProjectNode> kids = ProjectTree.Children(Store.Data, n.Id);
+                if (kids.Count == 0 && projectAddParent != n.Id)
+                    sp.Children.Add(ProjectHint("这一段还没内容：点 ＋ 添小项目", 52));
+                for (int i = 0; i < kids.Count; i++) sp.Children.Add(ProjectSubRow(kids[i], 52));
+                if (projectAddParent == n.Id)
+                    sp.Children.Add(ProjectComposer(n.Id, ProjectKind.Sub, null, null, "小项目名目，回车即录", 52));
+            }
+            return sp;
+        }
+
+        /// <summary>容器（大项目 / 分段）那一行：完成勾、展开箭头、名目、进度、行内操作。</summary>
+        StackPanel ProjectRow(ProjectNode n, double indent, int index, int total)
+        {
+            AppData data = Store.Data;
+            int subTotal;
+            int subDone;
+            ProjectTree.Count(data, n.Id, out subTotal, out subDone);
+            bool big = n.Kind == ProjectKind.Big;
+            bool nodeDone = ProjectTree.IsDone(data, n.Id);
+            string nodeId = n.Id;
+
+            StackPanel wrap = new StackPanel();
+            wrap.Margin = new Thickness(indent, 0, 0, 5);
+
+            Grid g = new Grid();
+            ColumnDefinition c0 = new ColumnDefinition();
+            c0.Width = GridLength.Auto;
+            g.ColumnDefinitions.Add(c0);
+            ColumnDefinition c1 = new ColumnDefinition();
+            c1.Width = new GridLength(1, GridUnitType.Star);
+            g.ColumnDefinitions.Add(c1);
+            ColumnDefinition c2 = new ColumnDefinition();
+            c2.Width = GridLength.Auto;
+            g.ColumnDefinitions.Add(c2);
+
+            // 完成勾 = 任务行上那枚圆勾（同一个控件、同一套动画）：点一下整段办完，再点撤销，办完放礼花。
+            CircleCheck doneCheck = new CircleCheck(big ? 17 : 15);
+            doneCheck.VerticalAlignment = VerticalAlignment.Center;
+            doneCheck.Margin = new Thickness(0, 0, 2, 0);
+            doneCheck.SetDone(nodeDone, false);
+            Ui.Tip(doneCheck, big ? "整个项目完成 / 撤销完成" : "这一段完成 / 撤销完成");
+            Border doneRef = doneCheck;
+            doneCheck.Toggled = delegate()
+            {
+                bool now = Store.ToggleProjectDone(nodeId);
+                if (now) CelebrateNode(doneRef);
+                AnimatedRefresh();
+            };
+
+            StackPanel head = new StackPanel();
+            head.Orientation = Orientation.Horizontal;
+            head.VerticalAlignment = VerticalAlignment.Center;
+            head.Children.Add(doneCheck);
+
+            Border arrow = Ui.Round(7, Theme.Transparent);
+            arrow.Width = 22;
+            arrow.Height = 22;
+            arrow.VerticalAlignment = VerticalAlignment.Center;
+            arrow.Margin = new Thickness(0, 0, 6, 0);
+            Path chev = Ui.IconPath(n.IsOpen ? "down" : "right", 11, Theme.B(Theme.TextFaint), 1.5);
+            chev.HorizontalAlignment = HorizontalAlignment.Center;
+            chev.VerticalAlignment = VerticalAlignment.Center;
+            arrow.Child = chev;
+            Ui.Click(arrow, delegate() { Store.ToggleProjectOpen(nodeId); }, Theme.Transparent, Theme.Transparent);
+            Ui.Tip(arrow, n.IsOpen ? "收起" : "展开");
+            head.Children.Add(arrow);
+            Grid.SetColumn(head, 0);
+            g.Children.Add(head);
+
+            StackPanel title = new StackPanel();
+            title.Orientation = Orientation.Horizontal;
+            title.VerticalAlignment = VerticalAlignment.Center;
+            Path icon = Ui.IconPath(big ? "layers" : "list", big ? 15 : 13,
+                Theme.B(nodeDone ? Theme.Success : (big ? Theme.Accent : Theme.TextFaint)), 1.5);
+            icon.VerticalAlignment = VerticalAlignment.Center;
+            icon.Margin = new Thickness(0, 0, 8, 0);
+            title.Children.Add(icon);
+            TextBlock name = Ui.Txt(ProjectTree.TitleOf(data, n), big ? 15.5 : 13.5,
+                Theme.B(nodeDone ? Theme.TextFaint : Theme.Text), big && !nodeDone);
+            if (nodeDone) name.TextDecorations = TextDecorations.Strikethrough;      // 办完了名字划掉，跟任务行一个样
+            name.VerticalAlignment = VerticalAlignment.Center;
+            title.Children.Add(name);
+
+            bool partsHere = n.Kind != ProjectKind.Sub;                   // 大项目 / 分段都能分份（小项目本身就是一条事项）
+            int ownSteps = n.Steps;
+            int ownReached = n.Reached;
+            int ownBaseDone = subDone - ownReached;      // 不含自己那几份的已完成数
+            bool hadBar = partsHere && ownSteps > 0;
+
+            Border prog = null;
+            TextBlock progText = null;
+            StepBar bar = null;
+            if (hadBar)
+            {
+                bar = new StepBar(ownSteps, ownReached, 150);
+                bar.Margin = new Thickness(10, 0, 0, 0);
+                bar.VerticalAlignment = VerticalAlignment.Center;
+                title.Children.Add(bar);
+            }
+            if (subTotal > 0)
+            {
+                bool allDone = subDone >= subTotal;
+                prog = Ui.Pill(string.Format("已竟 {0}/{1}", subDone, subTotal),
+                    allDone ? Theme.Success : Theme.TextMuted,
+                    Theme.Alpha(allDone ? Theme.Success : Theme.TextMuted, 0.13));
+                prog.Margin = new Thickness(10, 0, 0, 0);
+                progText = (TextBlock)prog.Child;
+                title.Children.Add(prog);
+            }
+            if (bar != null)
+            {
+                // 拖的时候只重画格子 + 改胶囊文字，松手才写盘
+                StepBar barRef = bar;
+                Border progRef = prog;
+                TextBlock progTextRef = progText;
+                int baseDone = ownBaseDone;
+                int allTotal = subTotal;
+                barRef.Changed = delegate(int k, bool final)
+                {
+                    if (progTextRef != null)
+                    {
+                        int nowDone = baseDone + k;
+                        bool allDone = nowDone >= allTotal;
+                        progTextRef.Text = string.Format("已竟 {0}/{1}", nowDone, allTotal);
+                        progTextRef.Foreground = Theme.B(allDone ? Theme.Success : Theme.TextMuted);
+                        if (progRef != null) progRef.Background = Theme.B(Theme.Alpha(allDone ? Theme.Success : Theme.TextMuted, 0.13));
+                    }
+                    if (final) Store.SetProjectReached(nodeId, k);
+                };
+            }
+            if (partsHere)
+            {
+                PartsStepper stepper = new PartsStepper(ownSteps);
+                stepper.Margin = new Thickness(8, 0, 0, 0);
+                stepper.Changed = delegate(int v) { Store.SetProjectSteps(nodeId, v); };
+                title.Children.Add(stepper);
+            }
+            Border titleHit = Ui.Round(8, Theme.Transparent);
+            titleHit.Padding = new Thickness(2, 3, 6, 3);
+            titleHit.Child = title;
+            Ui.Click(titleHit, delegate() { Store.ToggleProjectOpen(nodeId); }, Theme.B(Theme.PanelHi), Theme.Transparent);
+            Grid.SetColumn(titleHit, 1);
+            g.Children.Add(titleHit);
+
+            StackPanel acts = new StackPanel();
+            acts.Orientation = Orientation.Horizontal;
+            acts.VerticalAlignment = VerticalAlignment.Center;
+            acts.Opacity = 0.62;
+            acts.Children.Add(Ui.IconButton("plus", 26, 13, delegate()
+            {
+                projectAddParent = nodeId; projectAddKind = ProjectKind.Sub;
+                projectRenameId = null;
+                Store.SetProjectOpen(nodeId, true);
+                Refresh();
+            }, "添小项目"));
+            if (big)
+            {
+                acts.Children.Add(Ui.IconButton("layers", 26, 13, delegate()
+                {
+                    projectAddParent = nodeId; projectAddKind = ProjectKind.Stage;
+                    projectRenameId = null;
+                    Store.SetProjectOpen(nodeId, true);
+                    Refresh();
+                }, "将项目分段"));
+            }
+            acts.Children.Add(Ui.IconButton("pencil", 26, 13, delegate()
+            {
+                projectRenameId = nodeId; projectAddParent = null;
+                Refresh();
+            }, "改名"));
+            if (index > 0) acts.Children.Add(Ui.IconButton("up", 26, 13, delegate() { Store.MoveProject(nodeId, -1); }, "上移"));
+            if (index < total - 1) acts.Children.Add(Ui.IconButton("down", 26, 13, delegate() { Store.MoveProject(nodeId, 1); }, "下移"));
+            acts.Children.Add(Ui.IconButton("trash", 26, 13, delegate()
+            {
+                projectRenameId = null; projectAddParent = null;
+                Store.DeleteProject(nodeId);      // 直接删（连下級和它们的事项一起）
+            }, "删除（连同下面的一起）"));
+            Grid.SetColumn(acts, 2);
+            g.Children.Add(acts);
+
+            wrap.Children.Add(g);
+
+            if (projectRenameId == nodeId)
+                wrap.Children.Add(ProjectComposer(null, ProjectKind.Sub, nodeId, ProjectTree.TitleOf(data, n), "改名，回车即录", indent + 28));
+            return wrap;
+        }
+
+        /// <summary>最低一级的小项目：就是一条普通事项，勾选、拖动、顺延、删除都跟任务一致。</summary>
+        UIElement ProjectSubRow(ProjectNode n, double indent)
+        {
+            TaskItem it = ProjectTree.ItemOf(Store.Data, n);
+            if (it == null) return ProjectHint("这一格没有对应的事项，同步时会自动补一条", indent);
+            TaskRow row = MakeRow(it, false);
+            row.Margin = new Thickness(indent, 0, 0, 8);
+            return row;
+        }
+
+        /// <summary>项目页里的行内输入框：新建下級（nodeId 为空就是改名）。</summary>
+        Border ProjectComposer(string parentId, int kind, string nodeId, string initial, string watermark, double indent)
+        {
+            Border wrap = Ui.Round(10, Theme.B(Theme.PanelSoft), Theme.B(Theme.AccentSoft), 1);
+            wrap.Padding = new Thickness(10, 5, 10, 6);
+            wrap.Margin = new Thickness(indent, 4, 0, 6);
+
+            string renaming = nodeId;
+            HintBox box = new HintBox(watermark, 12.5);
+            if (initial != null && initial.Length > 0) box.Box.Text = initial;
+            box.Submitted = delegate(string text)
+            {
+                if (renaming != null) { projectRenameId = null; Store.RenameProject(renaming, text); }
+                else { projectAddParent = null; Store.AddProject(parentId, kind, text); }
+                Refresh();
+            };
+            box.Box.LostFocus += delegate(object s, RoutedEventArgs e)
+            {
+                Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Background,
+                    new Action(delegate() { CancelProjectInput(renaming, parentId); }));
+            };
+            wrap.Child = box;
+            wrap.Loaded += delegate(object s, RoutedEventArgs e)
+            {
+                Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Input,
+                    new Action(delegate() { box.FocusInput(); }));
+            };
+            return wrap;
+        }
+
+        /// <summary>行内输入框失焦就撤掉，别在页面上留一个半截的格子。</summary>
+        void CancelProjectInput(string nodeId, string parentId)
+        {
+            bool changed = false;
+            if (nodeId != null && projectRenameId == nodeId) { projectRenameId = null; changed = true; }
+            else if (nodeId == null && projectAddParent == parentId) { projectAddParent = null; changed = true; }
+            if (changed) Refresh();
+        }
+
+        Border ProjectHint(string text, double indent)
+        {
+            Border b = Ui.Round(9, Theme.Transparent);
+            b.Margin = new Thickness(indent, 2, 0, 8);
+            TextBlock t = Ui.Txt(text, 12, Theme.B(Theme.TextFaint), false);
+            t.TextWrapping = TextWrapping.Wrap;
+            t.VerticalAlignment = VerticalAlignment.Center;
+            b.Child = t;
+            return b;
         }
 
         // ---------------- 共用 ----------------

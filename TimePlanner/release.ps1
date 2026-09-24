@@ -1,14 +1,17 @@
 ﻿<#
   时间规划 · 一键发版（release.ps1）
   ------------------------------------------------------------------
-  1. 版本号只认 version.txt（用 -Version 2.0 可以直接改写它）
-  2. 编译前先停掉正在运行的主程序/插件，发完再自动拉起来（原来是运行中就恢复）
+  1. 版本号只认 version.txt（用 -Version sp2 可以直接改写它；特别版这条线的编号是 sp1、sp2 …）
+  2. 编译前先停掉「本目录里」正在运行的主程序/插件，发完再自动拉起来
+     （只按路径认亲：别处装的别的版本、以及经典版，都不动）
   3. 调 build.ps1 编译到 dist\（版本号写进 exe 的「关于」页）
   4. 离屏渲染截图到 outputs\screenshots\
-  5. 铺出 outputs\TimePlanner-<版本>\ 并打 -app.zip / -source.zip
+  5. 铺出 outputs\TimePlanner-<版本>-special\ 并打 -app.zip / -source.zip（都带上 CHANGELOG.md）
+  这里是「特别版」那条线（主线 main，标签 special/v<版本>）；经典版是另一条线，见 sync-classic.ps1。
+  更新日志在仓库根的 CHANGELOG.md：发版前请先把这一版写进去
   6. 自动删掉 outputs\ 里其它版本的目录和压缩包（只认 outputs 正下方、
      名字是 TimePlanner-<版本> 的目录 / TimePlanner-<版本>-*.zip，
-     screenshots\ 和 README.md 不碰；加 -DryRun 可以只看不删）
+     screenshots\、README.md 和经典版（*-classic*）不碰；加 -DryRun 可以只看不删）
 
   用法：
     powershell -ExecutionPolicy Bypass -File release.ps1
@@ -32,15 +35,15 @@ $verTxt  = Join-Path $tp   "version.txt"
 $utf8    = New-Object System.Text.UTF8Encoding($false)
 
 if ($Version) {
-    if ($Version -notmatch '^\d+(\.\d+)*$') { throw "版本号格式不对：$Version" }
+    if ($Version -notmatch '^(\d+(\.\d+)*|sp\d+)$') { throw "版本号格式不对：$Version（数字如 1.5.1，或特别版的 sp1、sp2）" }
     [System.IO.File]::WriteAllText($verTxt, $Version + "`r`n", $utf8)
 }
 $ver = ""
 if (Test-Path $verTxt) { $ver = (Get-Content $verTxt -Raw).Trim() }
 if (-not $ver) { throw "version.txt 是空的" }
-if ($ver -notmatch '^\d+(\.\d+)*$') { throw "version.txt 里的版本号格式不对：$ver" }
+if ($ver -notmatch '^(\d+(\.\d+)*|sp\d+)$') { throw "version.txt 里的版本号格式不对：$ver" }
 
-$name   = "TimePlanner-" + $ver
+$name   = "TimePlanner-" + $ver + "-special"
 $appZip = $name + "-app.zip"
 $srcZip = $name + "-source.zip"
 
@@ -48,7 +51,10 @@ Write-Host ""
 Write-Host ("=== 发版 " + $name + " ===") -ForegroundColor Cyan
 
 # ---------- 1. 停掉运行中的实例（编译时 exe 被占用会 CS0016 失败） ----------
-$procs = @(Get-Process TimePlanner, TimePlanner.Widget -ErrorAction SilentlyContinue)
+# 只停从本目录跑起来的：别处装的别的版本（比如经典版）还在用，不该被发版连坐。
+$procs = @(Get-Process TimePlanner, TimePlanner.Widget -ErrorAction SilentlyContinue | Where-Object {
+    try { $_.Path -and $_.Path.StartsWith($tp, [System.StringComparison]::OrdinalIgnoreCase) } catch { $false }
+})
 $wasRunning = $procs.Count -gt 0
 if ($wasRunning -and -not $DryRun) {
     Write-Host ("  停止实例：" + (($procs | ForEach-Object { $_.ProcessName + "(" + $_.Id + ")" }) -join ", "))
@@ -82,6 +88,7 @@ if (-not $SkipShots) {
     $map = @(
         @((Join-Path $tmpMain   "main-today.png"),     "main-today.png"),
         @((Join-Path $tmpMain   "main-week.png"),      "main-week.png"),
+        @((Join-Path $tmpMain   "main-project.png"),   "main-project.png"),
         @((Join-Path $tmpMain   "main-done.png"),      "main-done.png"),
         @((Join-Path $tmpMain   "main-settings.png"),  "main-settings.png"),
         @((Join-Path $tmpMain   "main-firework.png"),  "main-firework-1.png"),
@@ -118,6 +125,8 @@ New-Item -ItemType Directory -Force -Path $outDir | Out-Null
 foreach ($f in @("TimePlanner.exe", "TimePlanner.Widget.exe", "使用说明.txt", "README.md", "启动时间规划.cmd")) {
     Copy-Item -LiteralPath (Join-Path $dist $f) -Destination (Join-Path $outDir $f) -Force
 }
+$changeLog = Join-Path $root "CHANGELOG.md"
+if (Test-Path $changeLog) { Copy-Item -LiteralPath $changeLog -Destination (Join-Path $outDir "CHANGELOG.md") -Force }
 Write-Host ("  铺出 outputs\" + $name)
 
 # ---------- 5.5 刷新仓库里的免编译目录 exe\（GitHub 上直接下载就能跑，不用编译） ----------
@@ -130,11 +139,12 @@ foreach ($f in @("TimePlanner.exe", "TimePlanner.Widget.exe", "使用说明.txt"
     Copy-Item -LiteralPath $src -Destination (Join-Path $exeDir $f) -Force
     $exeFiles++
 }
+if (Test-Path $changeLog) { Copy-Item -LiteralPath $changeLog -Destination (Join-Path $exeDir "CHANGELOG.md") -Force }
 Write-Host ("  刷新 exe\（" + $exeFiles + " 个文件，免编译包）")
 
 # ---------- 6. 打包 ----------
 Push-Location $outDir
-& tar.exe -a -c -f (Join-Path $outputs $appZip) README.md TimePlanner.exe TimePlanner.Widget.exe 使用说明.txt 启动时间规划.cmd
+& tar.exe -a -c -f (Join-Path $outputs $appZip) README.md CHANGELOG.md TimePlanner.exe TimePlanner.Widget.exe 使用说明.txt 启动时间规划.cmd
 $tarApp = $LASTEXITCODE
 Pop-Location
 if ($tarApp -ne 0) { throw "打应用包失败" }
@@ -148,7 +158,9 @@ foreach ($f in @("build.ps1", "release.ps1", "version.txt", "README.md")) {
     Copy-Item -LiteralPath (Join-Path $tp $f) -Destination $pack -Force
 }
 Copy-Item -LiteralPath (Join-Path $tp "assets\app.ico") -Destination (Join-Path $pack "app.ico") -Force
-& tar.exe -a -c -f (Join-Path $outputs $srcZip) -C $pack src tools build.ps1 release.ps1 version.txt README.md app.ico
+$srcExtra = @()
+if (Test-Path $changeLog) { Copy-Item -LiteralPath $changeLog -Destination (Join-Path $pack "CHANGELOG.md") -Force; $srcExtra += "CHANGELOG.md" }
+& tar.exe -a -c -f (Join-Path $outputs $srcZip) -C $pack src tools build.ps1 release.ps1 version.txt README.md app.ico $srcExtra
 if ($LASTEXITCODE -ne 0) { throw "打源码包失败" }
 
 # ---------- 7. 删掉其它版本（这就是「自动删除上一版本」） ----------
@@ -158,6 +170,7 @@ $deleted = 0
 foreach ($item in @(Get-ChildItem -LiteralPath $outFull)) {
     if ($keep -contains $item.Name) { continue }
     if ($item.Name -notmatch '^TimePlanner-\d+(\.\d+)*') { continue }
+    if ($item.Name -like '*-classic*') { continue }   # 经典版是另一条线，不归这里清
     if ((Split-Path -Parent $item.FullName) -ne $outFull) { continue }
     if ($DryRun) { Write-Host ("    [干跑] 会删除 " + $item.Name) -ForegroundColor Yellow; continue }
     Remove-Item -LiteralPath $item.FullName -Recurse -Force
@@ -173,7 +186,7 @@ if ($wasRunning -and -not $DryRun) {
 }
 
 Write-Host ""
-Write-Host ("完成：" + $name) -ForegroundColor Green
+Write-Host ("完成：" + $name + "（特别版）") -ForegroundColor Green
 Write-Host ("  outputs\" + $name + "\")
 Write-Host ("  outputs\" + $appZip)
 Write-Host ("  outputs\" + $srcZip)

@@ -40,6 +40,9 @@ namespace TimePlanner.App
         bool animating;
         string lastSignature = "";
         internal HintBox AddBox;
+        string projectAddParent;                    // 项目页：正在给哪个节点加下級（null = 没在加）
+        int projectAddKind = ProjectKind.Sub;       // 加的是小项目还是分段
+        string projectRenameId;                     // 项目页：正在改名哪个节点（null = 没在改）
         string paintedPage = "";                                                    // 当前真正显示在 contentHost 里的页面
         readonly Dictionary<string, double> scrollMemo = new Dictionary<string, double>();   // 每个页面各记各的滚动位置
 
@@ -58,6 +61,8 @@ namespace TimePlanner.App
             Foreground = Theme.B(Theme.Text);
             FontFamily = Theme.Font;
             Icon = AppIcon.WpfIcon();
+            // 小项目也是普通事项，行上补一句它属于哪个项目
+            TaskRow.ProjectLabel = delegate(TaskItem t) { return ProjectLabelOf(t); };
             WindowChrome.SetWindowChrome(this, Chrome());
 
             Build();
@@ -285,6 +290,7 @@ namespace TimePlanner.App
             navList.Children.Add(planLabel);
             navList.Children.Add(NavItem("today", "list", "今日圣旨"));
             navList.Children.Add(NavItem("week", "calendar", "本周奏章"));
+            navList.Children.Add(NavItem("project", "layers", "项目档案"));
             navList.Children.Add(NavItem("done", "check", "已竟之事"));
             navList.Children.Add(NavItem("settings", "gear", "钦此设置"));
             Grid.SetRow(navList, 0);
@@ -531,13 +537,24 @@ namespace TimePlanner.App
               .Append(ShowDoneSection).Append('|').Append(st.Accent).Append('|').Append(st.WeekStartMonday).Append('|')
               .Append(st.WidgetVisible).Append('|').Append(st.WidgetShowDone).Append('|').Append(st.WidgetWidth).Append('|')
               .Append(st.WidgetHeight).Append('|').Append(st.WidgetScale).Append('|').Append(st.KeepDoneDays).Append('|')
-              .Append(st.AutoStart).Append('|').Append(st.PauseOnFullscreenEnabled).Append('|');
+              .Append(st.AutoStart).Append('|').Append(st.PauseOnFullscreenEnabled).Append('|')
+              .Append(Store.WriteError).Append('|');
             List<TaskItem> list = Store.Data.Tasks;
             for (int i = 0; i < list.Count; i++)
             {
                 TaskItem t = list[i];
                 sb.Append(t.Id).Append(':').Append(t.Done ? '1' : '0').Append(':').Append(t.Priority).Append(':')
-                  .Append(t.Sort).Append(':').Append(t.Date.Date.Ticks).Append(':').Append(t.Title).Append(':').Append(t.Tag).Append(':').Append(t.Note).Append(';');
+                  .Append(t.Sort).Append(':').Append(t.Date.Date.Ticks).Append(':').Append(t.Title).Append(':').Append(t.Tag).Append(':').Append(t.Note)
+                  .Append(':').Append(t.ProjectId).Append(';');
+            }
+            // 项目树也进签名：展开 / 收起、改名、挪次序之后这一页要重排
+            List<ProjectNode> projs = Store.Data.Projects;
+            for (int i = 0; i < projs.Count; i++)
+            {
+                ProjectNode n = projs[i];
+                sb.Append(n.Id).Append(':').Append(n.ParentId).Append(':').Append(n.Kind).Append(':').Append(n.Sort)
+                  .Append(':').Append(n.IsOpen ? '1' : '0').Append(':').Append(n.Title).Append(':').Append(n.ItemId)
+                  .Append(':').Append(n.Steps).Append(':').Append(n.Reached).Append(';');   // 份数也要进签名：改份数 / 拖横条之后这一页得重画
             }
             return sb.ToString();
         }
@@ -567,6 +584,7 @@ namespace TimePlanner.App
 
             UIElement body;
             if (Page == "week") { WeekAnchor = TaskQuery.WeekStart(WeekAnchor, Store.Settings.WeekStartMonday); body = BuildWeekPage(); }
+            else if (Page == "project") body = BuildProjectPage();
             else if (Page == "done") body = BuildDonePage();
             else if (Page == "settings") body = BuildSettingsPage();
             else body = BuildTodayPage();
@@ -629,6 +647,11 @@ namespace TimePlanner.App
                     for (int i = 0; i < wl.Count; i++) if (!wl[i].Done) openWeek++;
                     badge.Text = openWeek == 0 ? "" : openWeek.ToString();
                 }
+                else if (key == "project")
+                {
+                    int openProj = ProjectTree.OpenCount(Store.Data);
+                    badge.Text = openProj == 0 ? "" : openProj.ToString();
+                }
                 else badge.Text = "";
             }
         }
@@ -680,6 +703,19 @@ namespace TimePlanner.App
             widget.HorizontalAlignment = HorizontalAlignment.Stretch;
             ((TextBlock)widget.Child).HorizontalAlignment = HorizontalAlignment.Center;
             sideFoot.Children.Add(widget);
+
+            // 存盘失败必须让用户看见：否则改动只在内存里，一重启就没了。
+            string err = Store.WriteError;
+            if (err != null)
+            {
+                Border warn = Ui.Round(12, Theme.B(Theme.Panel), Theme.B(Theme.Danger), 1);
+                warn.Padding = new Thickness(13, 10, 13, 10);
+                warn.Margin = new Thickness(0, 8, 0, 0);
+                TextBlock wt = Ui.Txt("⚠ 存盘失败，改动还在内存里（正在重试）\n" + err, 11, Theme.B(Theme.Danger), false);
+                wt.TextWrapping = TextWrapping.Wrap;
+                warn.Child = wt;
+                sideFoot.Children.Add(warn);
+            }
         }
     }
 }

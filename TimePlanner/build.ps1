@@ -1,6 +1,9 @@
 ﻿param(
     [string]$Out = "dist",
-    [switch]$SkipIcon
+    [switch]$SkipIcon,
+    # 版别：special = 圣旨特别版（主线），classic = 经典版（1.5 那条线）。
+    # 它只影响两件事：程序里 AppVersion 的标记，以及隔离用的名字（互斥体/信号灯/自启条目）。
+    [string]$Edition = "special"
 )
 
 $ErrorActionPreference = "Stop"
@@ -65,6 +68,9 @@ $version = "1.0"
 $verTxt = Join-Path $root "version.txt"
 if (Test-Path $verTxt) { $version = (Get-Content $verTxt -Raw).Trim() }
 if (-not $version) { $version = "1.0" }
+$editionTag = "special"
+$editionLabel = "特别版"
+if ($Edition -eq "classic") { $editionTag = "classic"; $editionLabel = "经典版" }
 $verFile = Join-Path $work "AppVersion.cs"
 @"
 namespace TimePlanner.Core
@@ -72,7 +78,9 @@ namespace TimePlanner.Core
     public static class AppVersion
     {
         public const string Number = "$version";
-        public const string Display = "版本 $version";
+        public const string EditionTag = "$editionTag";
+        public const string EditionLabel = "$editionLabel";
+        public const string Display = "版本 $version $editionLabel";
     }
 }
 "@ | Set-Content -Encoding UTF8 $verFile
@@ -108,5 +116,5 @@ $widgetExe = Join-Path $dist "TimePlanner.Widget.exe"
 if ($LASTEXITCODE -ne 0) { throw "桌面插件编译失败" }
 
 Write-Host ""
-Write-Host ("构建完成:  版本 " + $version) -ForegroundColor Green
+Write-Host ("构建完成:  " + $editionLabel + " " + $version) -ForegroundColor Green
 Get-ChildItem $dist | ForEach-Object { Write-Host ("  {0,-28} {1,10:N0} KB" -f $_.Name, ($_.Length / 1KB)) }

@@ -76,6 +76,8 @@ namespace TimePlanner.Widget
             Icon = AppIcon.WpfIcon();
             showDone = store.Settings.WidgetShowDone;
             appliedAccent = store.Settings.Accent;
+            // 小项目也是普通事项，行上补一句它属于哪个项目
+            TaskRow.ProjectLabel = delegate(TaskItem t) { return ProjectLabelOf(t); };
 
             rootHost = new Grid();
             fx = new Canvas();
@@ -233,6 +235,7 @@ namespace TimePlanner.Widget
             MenuSkin.Line(menu);
             miToday = MenuSkin.Add(menu, "calendar", "只显示今天", delegate() { day = DateTime.Today; Refresh(); }, false, false);
             MenuSkin.Add(menu, "arrow-right", "今日事明日毕", delegate() { DeferAll(); }, false, false);
+            MenuSkin.Add(menu, "clock", "过期未竟挪到今天", delegate() { RollOverToToday(); }, false, false);
             MenuSkin.Add(menu, "expand", "恢复自适应大小", delegate()
             {
                 store.UpdateSettings(delegate(Settings s2) { s2.WidgetWidth = 0; s2.WidgetHeight = 0; });
@@ -263,6 +266,35 @@ namespace TimePlanner.Widget
             day = from.AddDays(1);
             store.Defer(from, day);
             AnimatedRefresh();
+        }
+
+        /// <summary>把今天之前没办完的事一并顺延到今天，并跳过去看。</summary>
+        void RollOverToToday()
+        {
+            DateTime today = DateTime.Today;
+            store.RollOver(today, today);
+            day = today;
+            AnimatedRefresh();
+        }
+
+        /// <summary>把正在看的这一天之前没办完的事一并顺延到这一天。</summary>
+        void RollOverToDay()
+        {
+            DateTime target = day.Date;
+            store.RollOver(target, target);
+            AnimatedRefresh();
+        }
+
+        /// <summary>被第二个实例（比如另一个版本）叫出来时用：显示并把窗口拉到前面。</summary>
+        public void ShowWidget()
+        {
+            try
+            {
+                if (!IsVisible) Show();
+                DesktopInterop.SetVisible(this, true);
+                DesktopInterop.Activate(this);
+            }
+            catch (Exception) { }
         }
 
         Border BuildHeader()
@@ -736,6 +768,17 @@ namespace TimePlanner.Widget
             }
         }
 
+        /// <summary>行上那句归属：这条小项目属于「大项目 / 分段」。</summary>
+        string ProjectLabelOf(TaskItem t)
+        {
+            if (t == null || t.ProjectId == null || t.ProjectId.Length == 0) return "";
+            ProjectNode n = ProjectTree.ById(store.Data, t.ProjectId);
+            if (n == null) return "";
+            string path = ProjectTree.Path(store.Data, n.ParentId, true);
+            if (path.Length == 0) return "";
+            return path.Length > 14 ? path.Substring(0, 13) + "…" : path;
+        }
+
         /// <summary>把当前要显示的内容压成签名，内容没变就不重建界面。</summary>
         string Signature()
         {
@@ -748,7 +791,17 @@ namespace TimePlanner.Widget
             {
                 TaskItem t = list[i];
                 sb.Append(t.Id).Append(':').Append(t.Done ? '1' : '0').Append(':').Append(t.Priority).Append(':')
-                  .Append(t.Sort).Append(':').Append(t.Date.Date.Ticks).Append(':').Append(t.Title).Append(':').Append(t.Tag).Append(';');
+                  .Append(t.Sort).Append(':').Append(t.Date.Date.Ticks).Append(':').Append(t.Title).Append(':').Append(t.Tag)
+                  .Append(':').Append(t.ProjectId).Append(';');
+            }
+            // 分了份的项目也进签名：在插件上点掉 1 份之后，份数那一行得跟着重画
+            List<ProjectNode> projs = ProjectTree.All(store.Data);
+            for (int i = 0; i < projs.Count; i++)
+            {
+                ProjectNode pn = projs[i];
+                if (pn == null) continue;
+                sb.Append(pn.Id).Append(':').Append(pn.Kind).Append(':').Append(pn.Steps).Append(':')
+                  .Append(pn.Reached).Append(':').Append(pn.Title).Append(';');
             }
             return sb.ToString();
         }
@@ -768,6 +821,8 @@ namespace TimePlanner.Widget
             List<TaskItem> all = TaskQuery.ForDay(store.Data.Tasks, d);
             List<TaskItem> open = all.Where(t => !t.Done).ToList();
             List<TaskItem> done = all.Where(t => t.Done).ToList();
+            // 这一天之前还没办完的事：用来提示「不是数据没了，是都留在前面几天了」
+            List<TaskItem> overdue = store.Data.Tasks.Where(t => !t.Done && t.Date.Date < d).ToList();
 
             dayTitle.Text = DayHeadline(d);
             bool fixedSize = (SizeToContent & SizeToContent.Width) == (SizeToContent)0;
@@ -823,11 +878,29 @@ namespace TimePlanner.Widget
             }
 
             listHost.Children.Clear();
-            if (open.Count == 0 && done.Count == 0)
+
+            // 压在过去的未竟之事：以前它们只是静静留在旧日期里，今天这一栏空空的，
+            // 看着特别像「数据丢了」。所以不管这天有没有安排，都在顶部说明一句，并给一键顺延。
+            if (overdue.Count > 0)
+            {
+                Border roll = Ui.Chip(string.Format("此前尚余 {0} 事未竟 · 挪到{1}", overdue.Count, isToday ? "今日" : "此日"),
+                    false, delegate() { RollOverToDay(); }, Theme.Accent);
+                roll.HorizontalAlignment = HorizontalAlignment.Center;
+                roll.Margin = new Thickness(0, 0, 0, 7);
+                Ui.Tip(roll, string.Format("把 {0} 件压在过去的未竟之事一并顺延到这一天", overdue.Count));
+                listHost.Children.Add(roll);
+            }
+
+            // 分了份的大项目 / 分段也摆在插件上：只写「几分之几」，点一下那枚勾就办完 1 份。
+            List<ProjectNode> parts = PartNodes();
+            for (int i = 0; i < parts.Count; i++) listHost.Children.Add(MakePartRow(parts[i]));
+
+            if (open.Count == 0 && done.Count == 0 && parts.Count == 0)
             {
                 StackPanel empty = new StackPanel();
                 empty.Margin = new Thickness(0, 6, 0, 6);
-                TextBlock e1 = Ui.Txt(isToday ? "今日尚无未竟之事" : "此日无甚要事", 12.5, Theme.B(Theme.TextFaint), false);
+                TextBlock e1 = Ui.Txt(!isToday ? "此日无甚要事" : (overdue.Count > 0 ? "今日尚无安排" : "今日尚无未竟之事"),
+                    12.5, Theme.B(Theme.TextFaint), false);
                 e1.HorizontalAlignment = HorizontalAlignment.Center;
                 empty.Children.Add(e1);
                 TextBlock e2 = Ui.Txt("于下方落笔记事", 11, Theme.B(Theme.TextFaint), false);
@@ -861,6 +934,124 @@ namespace TimePlanner.Widget
                     }
                 }
             }
+        }
+
+        /// <summary>
+        /// 插件上要露脸的项目行：分了份的大项目 / 分段（份数为 0 的按小项目算，不在这儿出现），
+        /// 按树上的次序排，下級缩进 —— 跟主程序项目页一个读法。办满份数的跟任务一样，交给「已竟之事」那个开关管。
+        /// </summary>
+        List<ProjectNode> PartNodes()
+        {
+            List<ProjectNode> list = new List<ProjectNode>();
+            AddPartNodes("", 0, list);
+            return list;
+        }
+
+        void AddPartNodes(string parentId, int depth, List<ProjectNode> into)
+        {
+            if (depth > 8) return;
+            List<ProjectNode> kids = ProjectTree.Children(store.Data, parentId);
+            for (int i = 0; i < kids.Count; i++)
+            {
+                ProjectNode n = kids[i];
+                // 办满份数的跟任务一样：整个节点真办完了（份满 + 底下小项目也勾了）才收起来
+                if (n.HasSteps && (showDone || !ProjectTree.IsDone(store.Data, n.Id))) into.Add(n);
+                AddPartNodes(n.Id, depth + 1, into);
+            }
+        }
+
+        int DepthOf(ProjectNode n)
+        {
+            int depth = 0;
+            string pid = n.ParentId;
+            while (pid != null && pid.Length > 0 && depth < 16)
+            {
+                ProjectNode up = ProjectTree.ById(store.Data, pid);
+                if (up == null) break;
+                depth++;
+                pid = up.ParentId;
+            }
+            return depth;
+        }
+
+        /// <summary>
+        /// 分了份的项目 / 分段在插件上的那一行：只写「几分之几」，不画横条 —— 插件就这么点地方。
+        /// 那枚勾跟任务行是同一个控件：点一下只办完 1 份（办满最后一份时才放礼花），
+        /// 办满之后再点一下 = 撤销重来，跟任务勾选一个脾气。
+        /// </summary>
+        Border MakePartRow(ProjectNode node)
+        {
+            string id = node.Id;
+            int steps = node.Steps;
+            bool big = node.Kind == ProjectKind.Big;
+            bool filled = node.Reached >= steps;
+
+            Grid g = new Grid();
+            g.ColumnDefinitions.Add(new ColumnDefinition());
+            ColumnDefinition cName = new ColumnDefinition();
+            cName.Width = new GridLength(1, GridUnitType.Star);
+            g.ColumnDefinitions.Add(cName);
+            g.ColumnDefinitions.Add(new ColumnDefinition());
+
+            CircleCheck check = new CircleCheck(15);
+            check.VerticalAlignment = VerticalAlignment.Center;
+            check.Margin = new Thickness(4, 0, 4, 0);
+            check.SetDone(filled, false);
+            Ui.Tip(check, string.Format("{0}：办完 1 份（现在 {1}/{2}）；办满之后再点 = 撤销重来",
+                ProjectTree.TitleOf(store.Data, node), node.Reached, steps));
+            CircleCheck checkRef = check;
+            check.Toggled = delegate()
+            {
+                ProjectNode cur = ProjectTree.ById(store.Data, id);
+                if (cur == null || cur.Steps <= 0) return;
+                bool full = cur.Reached >= cur.Steps;
+                int next = full ? 0 : cur.Reached + 1;
+                store.SetProjectReached(id, next);
+                if (!full && next >= cur.Steps) CelebrateNode(checkRef);
+                Refresh();
+            };
+            Grid.SetColumn(check, 0);
+            g.Children.Add(check);
+
+            StackPanel title = new StackPanel();
+            title.Orientation = Orientation.Horizontal;
+            title.VerticalAlignment = VerticalAlignment.Center;
+            Path icon = Ui.IconPath(big ? "layers" : "list", 12,
+                Theme.B(filled ? Theme.Success : Theme.Accent), 1.4);
+            icon.VerticalAlignment = VerticalAlignment.Center;
+            icon.Margin = new Thickness(0, 0, 6, 0);
+            title.Children.Add(icon);
+            TextBlock name = Ui.Txt(ProjectTree.TitleOf(store.Data, node), 12.5,
+                Theme.B(filled ? Theme.TextFaint : Theme.Text), big);
+            name.VerticalAlignment = VerticalAlignment.Center;
+            name.TextTrimming = TextTrimming.CharacterEllipsis;
+            if (filled) name.TextDecorations = TextDecorations.Strikethrough;
+            title.Children.Add(name);
+            Grid.SetColumn(title, 1);
+            g.Children.Add(title);
+
+            TextBlock frac = Ui.Txt(string.Format("{0}/{1}", node.Reached, steps), 12.5,
+                Theme.B(filled ? Theme.Success : Theme.TextMuted), true);
+            frac.VerticalAlignment = VerticalAlignment.Center;
+            frac.Margin = new Thickness(6, 0, 2, 0);
+            Grid.SetColumn(frac, 2);
+            g.Children.Add(frac);
+
+            Border row = Ui.Round(9, Theme.B(Theme.Panel));
+            row.Padding = new Thickness(6, 6, 8, 6);
+            row.Margin = new Thickness(DepthOf(node) * 12, 0, 0, 6);      // 下級往里缩，一眼看出隶属
+            row.Child = g;
+            return row;
+        }
+
+        /// <summary>项目 / 分段在插件上办完一份（或办满）时也放一筒礼花 —— 跟任务勾选同一批鼓励语。</summary>
+        void CelebrateNode(FrameworkElement anchor)
+        {
+            if (fx == null || anchor == null) return;
+            Point o = Ui.CenterOf(anchor, fx);
+            double aim = o.X > fx.ActualWidth * 0.55 ? -146 : -34;
+            Fireworks.Popper(fx, o, 1.25, aim, null);
+            Say(Fireworks.PickCheer());
         }
 
         TaskRow MakeRow(TaskItem t)
@@ -1020,7 +1211,7 @@ namespace TimePlanner.Widget
         {
             try
             {
-                Process[] ps = Process.GetProcessesByName("TimePlanner");
+                Process[] ps = Install.Siblings("TimePlanner");
                 for (int i = 0; i < ps.Length; i++)
                 {
                     IntPtr h = ps[i].MainWindowHandle;
@@ -1034,7 +1225,7 @@ namespace TimePlanner.Widget
                 // 走到这儿说明主程序要么缩在托盘里（窗口一 Hide，MainWindowHandle 就是 0），
                 // 要么根本没开。前者按句柄找不到人，得靠信号灯把它叫醒；
                 // 信号灯没挂上（没在跑，或者是老版本主程序）就按老办法重新拉一个起来。
-                if (AppSignal.RequestShow()) return;
+                if (AppSignal.Request(AppSignal.ShowMain)) return;
                 string exe = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "TimePlanner.exe");
                 if (System.IO.File.Exists(exe)) Process.Start(exe);
             }

@@ -1,4 +1,4 @@
-﻿using System;
+﻿﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -148,14 +148,24 @@ namespace TimePlanner.Core
         Timer _writeTimer;
         bool _dirty;
         bool _loading;
+        string _writeError;
+        string _loggedWriteError = "";
 
         /// <summary>改动后延迟写盘的毫秒数：把密集操作合并成一次写盘，界面不必等磁盘。</summary>
         const int WriteDelay = 180;
+
+        /// <summary>
+        /// 离屏渲染时把数据目录指到别处用。
+        /// 渲染只为出截图，一律走这份覆盖值，连读都不读用户的真实数据文件——
+        /// 免得哪天示例数据没盖全，把用户自己的任务渲染进要提交的截图里。
+        /// </summary>
+        public static string DataDirOverride;
 
         public static string DataDir
         {
             get
             {
+                if (DataDirOverride != null) return DataDirOverride;
                 string dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "TimePlanner");
                 if (!Directory.Exists(dir)) Directory.CreateDirectory(dir);
                 return dir;
@@ -174,6 +184,9 @@ namespace TimePlanner.Core
 
         /// <summary>只读模式（离屏渲染等）：置 true 后一律不写盘，免得动到用户的真实数据。</summary>
         public bool ReadOnly;
+
+        /// <summary>最近一次写盘失败的原因（null = 正常）。界面据此亮红字——此前写盘失败是静默的，改动只留在内存里，一重启就没了。</summary>
+        public string WriteError { get { lock (_gate) { return _writeError; } } }
 
         public Settings Settings { get { return Data.Settings; } }
 
@@ -196,6 +209,17 @@ namespace TimePlanner.Core
                             try { File.Copy(DataFile, bad, true); } catch (Exception) { }
                             _data = null;
                         }
+                    }
+                    // 主文件读不出来（写坏了、被误删、被杀毒软件吞了）时退回到上一次写盘前的备份，
+                    // 总比直接甩给用户一份空的默认数据强。
+                    if (_data == null && File.Exists(DataFile + ".bak"))
+                    {
+                        try
+                        {
+                            _data = ReadFile(DataFile + ".bak");
+                            Diagnostics.Log("数据", "data.json 读不出来，已从 data.json.bak 恢复");
+                        }
+                        catch (Exception) { _data = null; }
                     }
                     if (_data == null)
                     {
@@ -330,6 +354,9 @@ namespace TimePlanner.Core
                     }
                     if (File.Exists(DataFile))
                     {
+                        // 覆盖前把当前这份留成 .bak：万一新写的内容有问题、或者文件被别的程序弄坏，
+                        // 下次启动还能顺着 .bak 回到上一个可用状态。
+                        try { File.Copy(DataFile, DataFile + ".bak", true); } catch (Exception) { }
                         try { File.Replace(tmp, DataFile, null, true); }
                         catch (Exception)
                         {
@@ -342,9 +369,10 @@ namespace TimePlanner.Core
                         File.Move(tmp, DataFile);
                     }
                 }
-                catch (Exception)
+                catch (Exception ex)
                 {
                     try { if (File.Exists(tmp)) File.Delete(tmp); } catch (Exception) { }
+                    MarkWriteError(ex.Message);
                     return false;
                 }
                 finally
@@ -352,7 +380,49 @@ namespace TimePlanner.Core
                     if (held) { try { m.ReleaseMutex(); } catch (Exception) { } }
                 }
             }
+            ClearWriteError();
+            Snapshot();
             return true;
+        }
+
+        /// <summary>写盘失败：立刻记日志（同一句只记一次，重试时不刷屏），并通知界面亮红字。</summary>
+        void MarkWriteError(string why)
+        {
+            bool first;
+            lock (_gate)
+            {
+                first = _loggedWriteError != why;
+                _loggedWriteError = why;
+                _writeError = why;
+            }
+            if (first)
+            {
+                Diagnostics.Log("数据", "存盘失败，改动还在内存里（会自动重试）：" + why);
+                RaiseChanged();
+            }
+        }
+
+        void ClearWriteError()
+        {
+            bool had;
+            lock (_gate) { had = _writeError != null; _writeError = null; _loggedWriteError = ""; }
+            if (had) RaiseChanged();
+        }
+
+        /// <summary>每成功写一次就留一份带时间戳的快照，只保留最近 12 份；数据被写坏或被谁改乱了还能往回倒。</summary>
+        void Snapshot()
+        {
+            try
+            {
+                string dir = Path.Combine(DataDir, "snapshots");
+                Directory.CreateDirectory(dir);
+                string full = Path.Combine(dir, "data-" + DateTime.Now.ToString("yyyyMMdd-HHmmss") + ".json");
+                if (!File.Exists(full)) File.Copy(DataFile, full, true);
+                string[] files = Directory.GetFiles(dir, "data-*.json");
+                Array.Sort(files, StringComparer.Ordinal);
+                for (int i = 0; i < files.Length - 12; i++) { try { File.Delete(files[i]); } catch (Exception) { } }
+            }
+            catch (Exception) { }
         }
 
         /// <summary>修改数据 + 延后落盘 + 通知两端界面（不会阻塞界面线程）。</summary>
@@ -499,6 +569,9 @@ namespace TimePlanner.Core
                 t.Tag = edited.Tag;
                 t.Priority = edited.Priority;
                 t.Date = edited.Date.Date;
+                // 小项目的名字在项目树上还有一份，编辑弹窗改完这里跟上
+                ProjectNode owner = ProjectTree.NodeOfItem(d, t.Id);
+                if (owner != null) owner.Title = t.Title;
             });
         }
 
@@ -508,7 +581,12 @@ namespace TimePlanner.Core
             {
                 for (int i = 0; i < d.Tasks.Count; i++)
                 {
-                    if (d.Tasks[i].Id == id) { d.Tasks.RemoveAt(i); return; }
+                    if (d.Tasks[i].Id != id) continue;
+                    // 项目里的事项：删掉它，项目树上那一格也一起删（不然会留下空壳）
+                    ProjectNode owner = ProjectTree.NodeOfItem(d, id);
+                    if (owner != null) { RemoveProjectSubtree(d, owner.Id); return; }
+                    d.Tasks.RemoveAt(i);
+                    return;
                 }
             });
         }
@@ -540,6 +618,30 @@ namespace TimePlanner.Core
             });
         }
 
+        /// <summary>
+        /// 把某天之前还没办完的事一并顺延到目标日（通常是今天），返回挪了几条。
+        /// 「昨天没做完的今天接着做」是常态，光靠一天天手动拖太费劲；
+        /// 顺延一下，也不至于让「今天空着」看起来像数据丢了。
+        /// </summary>
+        public int RollOver(DateTime beforeDay, DateTime toDay)
+        {
+            int moved = 0;
+            Mutate(delegate(AppData d)
+            {
+                for (int i = 0; i < d.Tasks.Count; i++)
+                {
+                    TaskItem t = d.Tasks[i];
+                    if (!t.Done && t.Date.Date < beforeDay.Date)
+                    {
+                        t.Date = toDay.Date;
+                        t.Sort = NextSort(d, toDay) + i;
+                        moved++;
+                    }
+                }
+            });
+            return moved;
+        }
+
         public void ClearDoneBefore(DateTime day)
         {
             Mutate(delegate(AppData d)
@@ -547,9 +649,215 @@ namespace TimePlanner.Core
                 for (int i = d.Tasks.Count - 1; i >= 0; i--)
                 {
                     TaskItem t = d.Tasks[i];
+                    if (t.ProjectId != null && t.ProjectId.Length > 0) continue;   // 项目的事项由项目页自己管
                     if (t.Done && t.Date.Date < day.Date) d.Tasks.RemoveAt(i);
                 }
             });
+        }
+
+        // ---- 项目树（大项目 / 分段 / 小项目） ----
+        //
+        // 小项目底下挂一条普通事项（TaskItem.ProjectId = 节点 id）：于是它天生就出现在
+        // 今日 / 本周 / 插件里，勾选、拖动改期、顺延、礼花全都跟任务走同一条路。
+        // 节点名和那条事项的标题由这里一起改，别在别处只动一边。
+
+        /// <summary>在某个节点下新建项目（parentId 空 = 新建大项目）。返回新节点。</summary>
+        public ProjectNode AddProject(string parentId, int kind, string rawTitle)
+        {
+            string title; string tag; int prio;
+            TaskQuery.ParseQuickAdd(rawTitle, out title, out tag, out prio);
+            if (title.Length == 0) return null;
+            ProjectNode made = null;
+            Mutate(delegate(AppData d)
+            {
+                string pid = parentId == null ? "" : parentId;
+                ProjectNode parent = pid.Length == 0 ? null : ProjectTree.ById(d, pid);
+                int realKind;
+                if (pid.Length == 0) realKind = ProjectKind.Big;
+                else if (parent == null || parent.Kind == ProjectKind.Sub) return;      // 小项目下面不加下級
+                else if (parent.Kind == ProjectKind.Stage) realKind = ProjectKind.Sub;  // 分段里只放小项目
+                else realKind = kind == ProjectKind.Stage ? ProjectKind.Stage : ProjectKind.Sub;
+
+                made = ProjectNode.Create(pid, realKind);
+                made.Title = title;
+                made.Sort = ProjectTree.NextSort(d, pid);
+                d.Projects.Add(made);
+                if (realKind == ProjectKind.Sub) AttachItem(d, made, tag, prio);
+            });
+            return made;
+        }
+
+        /// <summary>给小项目挂上它自己的事项（标题就是节点名）。</summary>
+        static void AttachItem(AppData d, ProjectNode n, string tag, int prio)
+        {
+            TaskItem t = TaskItem.Create(n.Title, DateTime.Today);
+            t.Tag = tag == null ? "" : tag;
+            t.Priority = prio;
+            t.Sort = NextSort(d, DateTime.Today);
+            t.ProjectId = n.Id;
+            d.Tasks.Add(t);
+            n.ItemId = t.Id;
+        }
+
+        /// <summary>改名（顺带支持 「…#标签 !!」的写法，会落到它那条事项上）。</summary>
+        public void RenameProject(string id, string rawTitle)
+        {
+            string title; string tag; int prio;
+            TaskQuery.ParseQuickAdd(rawTitle, out title, out tag, out prio);
+            if (title.Length == 0) return;
+            Mutate(delegate(AppData d)
+            {
+                ProjectNode n = ProjectTree.ById(d, id);
+                if (n == null) return;
+                n.Title = title;
+                TaskItem it = ProjectTree.ItemOf(d, n);
+                if (it == null) return;
+                it.Title = title;
+                if (tag.Length > 0) it.Tag = tag;
+                if (prio > 0) it.Priority = prio;
+            });
+        }
+
+        /// <summary>删掉一个项目：它下面的分段 / 小项目和那些事项一起删。</summary>
+        public void DeleteProject(string id)
+        {
+            Mutate(delegate(AppData d)
+            {
+                if (ProjectTree.ById(d, id) == null) return;
+                RemoveProjectSubtree(d, id);
+            });
+        }
+
+        /// <summary>同级里往上（-1）/ 往下（+1）挪一格。</summary>
+        public void MoveProject(string id, int delta)
+        {
+            Mutate(delegate(AppData d)
+            {
+                ProjectNode n = ProjectTree.ById(d, id);
+                if (n == null) return;
+                List<ProjectNode> sib = ProjectTree.Children(d, n.ParentId);
+                int idx = -1;
+                for (int i = 0; i < sib.Count; i++) if (sib[i].Id == id) { idx = i; break; }
+                int to = idx + delta;
+                if (idx < 0 || to < 0 || to >= sib.Count) return;
+                ProjectNode tmp = sib[idx];
+                sib[idx] = sib[to];
+                sib[to] = tmp;
+                for (int i = 0; i < sib.Count; i++) sib[i].Sort = i;   // 顺手把乱掉的排序值理顺
+            });
+        }
+
+        /// <summary>项目页里展开 / 收起一个容器。</summary>
+        public void ToggleProjectOpen(string id)
+        {
+            Mutate(delegate(AppData d)
+            {
+                ProjectNode n = ProjectTree.ById(d, id);
+                if (n == null) return;
+                n.Open = !n.IsOpen;
+            });
+        }
+
+        /// <summary>指定展开 / 收起（点了「加小项目」就把这一格摊开，不然输入框没处放）。</summary>
+        public void SetProjectOpen(string id, bool open)
+        {
+            Mutate(delegate(AppData d)
+            {
+                ProjectNode n = ProjectTree.ById(d, id);
+                if (n == null) return;
+                n.Open = open;
+            });
+        }
+
+        /// <summary>项目页的「全部展开 / 全部收起」。</summary>
+        public void SetAllProjectsOpen(bool open)
+        {
+            Mutate(delegate(AppData d)
+            {
+                List<ProjectNode> all = ProjectTree.All(d);
+                for (int i = 0; i < all.Count; i++)
+                    if (all[i] != null && all[i].IsContainer) all[i].Open = open;
+            });
+        }
+
+        /// <summary>给「大项目 / 分段」那一行定份数：0 = 不分份，回到按小项目算（小项目本身就是一条事项，不分份）。</summary>
+        public void SetProjectSteps(string id, int steps)
+        {
+            Mutate(delegate(AppData d)
+            {
+                ProjectNode n = ProjectTree.ById(d, id);
+                if (n == null || n.Kind == ProjectKind.Sub) return;
+                if (steps < 0) steps = 0;
+                if (steps > ProjectNode.MaxSteps) steps = ProjectNode.MaxSteps;
+                n.Steps = steps;
+                if (n.Reached > steps) n.Reached = steps;
+            });
+        }
+
+        /// <summary>拖横条：这个大项目已经办到第几份。</summary>
+        public void SetProjectReached(string id, int reached)
+        {
+            Mutate(delegate(AppData d)
+            {
+                ProjectNode n = ProjectTree.ById(d, id);
+                if (n == null || n.Steps <= 0) return;
+                if (reached < 0) reached = 0;
+                if (reached > n.Steps) reached = n.Steps;
+                n.Reached = reached;
+            });
+        }
+
+        /// <summary>
+        /// 容器那一行的「完成」小按钮 —— 跟任务行上的勾选框一个意思：点一下整段办完，再点撤销。
+        ///   · 底下的小项目：全部勾上（连完成时间一起记）/ 全部撤销；
+        ///   · 自己分的份数（大项目那几份、分段那「办完了」的 1 份）：置满 / 清零；
+        ///   · 底下什么都没有的空容器：记成「1 份、已办」，免得点一下没反应。
+        /// 返回点完之后是不是「办完了」（界面照这个放礼花）。
+        /// </summary>
+        public bool ToggleProjectDone(string id)
+        {
+            bool now = false;
+            Mutate(delegate(AppData d)
+            {
+                ProjectNode n = ProjectTree.ById(d, id);
+                if (n == null) return;
+                now = !ProjectTree.IsDone(d, id);
+                List<ProjectNode> leaves = ProjectTree.LeavesUnder(d, id);
+                for (int i = 0; i < leaves.Count; i++)
+                {
+                    TaskItem it = ProjectTree.ItemOf(d, leaves[i]);
+                    if (it == null) continue;
+                    it.Done = now;
+                    it.DoneAt = now ? (DateTime?)DateTime.Now : null;
+                }
+                // 分段那「1 份」只是「办完了」的记号（分段的份数不给用户调）：撤销时连这条记号一起撤掉，
+                // 免得一个空分段撤销完还永远挂着 1 份、把它爹的「已竟 x / y」越算越大。
+                bool justMark = n.Kind != ProjectKind.Big && n.Steps <= 1 && leaves.Count == 0;
+                if (n.Steps > 0)
+                {
+                    if (now) n.Reached = n.Steps;
+                    else if (justMark) { n.Steps = 0; n.Reached = 0; }
+                    else n.Reached = 0;
+                }
+                else if (now && leaves.Count == 0) { n.Steps = 1; n.Reached = 1; }
+            });
+            return now;
+        }
+
+        static void RemoveProjectSubtree(AppData d, string nodeId)
+        {
+            List<ProjectNode> kids = ProjectTree.Children(d, nodeId);
+            for (int i = 0; i < kids.Count; i++) RemoveProjectSubtree(d, kids[i].Id);
+            ProjectNode n = ProjectTree.ById(d, nodeId);
+            if (n == null) return;
+            TaskItem it = ProjectTree.ItemOf(d, n);
+            if (it != null)
+            {
+                for (int i = 0; i < d.Tasks.Count; i++)
+                    if (d.Tasks[i].Id == it.Id) { d.Tasks.RemoveAt(i); break; }
+            }
+            for (int i = d.Projects.Count - 1; i >= 0; i--)
+                if (d.Projects[i].Id == nodeId) d.Projects.RemoveAt(i);
         }
 
         static TaskItem Find(AppData d, string id)

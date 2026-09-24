@@ -1,4 +1,6 @@
 ﻿using System;
+using System.Collections.Generic;
+using System.IO;
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Interop;
@@ -26,6 +28,17 @@ namespace TimePlanner.Core
 
         [DllImport("user32.dll")]
         static extern bool ShowWindow(IntPtr hWnd, int cmd);
+
+        [DllImport("user32.dll")]
+        static extern bool IsWindowVisible(IntPtr hWnd);
+
+        [DllImport("user32.dll")]
+        static extern bool EnumWindows(EnumProc cb, IntPtr param);
+
+        [DllImport("user32.dll")]
+        static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint pid);
+
+        delegate bool EnumProc(IntPtr hWnd, IntPtr param);
 
         const int GWL_EXSTYLE = -20;
         const int WS_EX_TOOLWINDOW = 0x00000080;
@@ -143,6 +156,36 @@ namespace TimePlanner.Core
             SetForegroundWindow(hwnd);
         }
 
+        /// <summary>
+        /// 找某个进程里「看得见」的那个顶层窗口（面积最大的一个）。
+        ///
+        /// 为什么不用 Process.MainWindowHandle：插件是 ShowInTaskbar=false 的无边框窗口，
+        /// WPF 会把它挂在一个隐藏的宿主窗口上，MainWindowHandle 直接返回 0，找不着人。
+        /// 这里自己枚举一次，好叫醒那些还没挂信号灯的老版本插件。
+        /// </summary>
+        public static IntPtr FindTopWindow(int pid)
+        {
+            IntPtr best = IntPtr.Zero;
+            long bestArea = -1;
+            try
+            {
+                EnumWindows(delegate(IntPtr h, IntPtr param)
+                {
+                    uint wpid;
+                    GetWindowThreadProcessId(h, out wpid);
+                    if ((int)wpid != pid) return true;
+                    if (!IsWindowVisible(h)) return true;
+                    RECT r;
+                    if (!GetWindowRect(h, out r)) return true;
+                    long area = (long)(r.Right - r.Left) * (long)(r.Bottom - r.Top);
+                    if (area > bestArea) { bestArea = area; best = h; }
+                    return true;
+                }, IntPtr.Zero);
+            }
+            catch (Exception) { }
+            return best;
+        }
+
         /// <summary>标记为工具窗口：不出现在 Alt+Tab 与任务栏中。</summary>
         public static void MakeToolWindow(Window w)
         {
@@ -186,8 +229,11 @@ namespace TimePlanner.Core
         // ---- 开机自启 ----
 
         const string RunKey = @"Software\Microsoft\Windows\CurrentVersion\Run";
-        const string RunName = "TimePlanner";
 
+        /// <summary>1.7 及以前所有版本共用的那一个自启条目名。</summary>
+        const string LegacyRunName = "TimePlanner";
+
+        /// <summary>本版本自己的自启条目（名字带版本和目录，两个版本各占一条，互相不覆盖）。</summary>
         public static bool AutoStartEnabled()
         {
             try
@@ -195,8 +241,14 @@ namespace TimePlanner.Core
                 using (RegistryKey k = Registry.CurrentUser.OpenSubKey(RunKey, false))
                 {
                     if (k == null) return false;
-                    object v = k.GetValue(RunName);
-                    return v != null && v.ToString().Length > 0;
+                    object v = k.GetValue(Install.AutoStartName);
+                    if (v != null && v.ToString().Length > 0) return true;
+                    // 老版本用的是一条公共条目。只要它指的正是我这个目录，就算我这条已经开着——
+                    // 不然升级后设置页会显示成「关」，而登录时其实照样会启动，白让人糊涂。
+                    object legacy = k.GetValue(LegacyRunName);
+                    if (legacy == null) return false;
+                    string exe = ExePathOf(legacy.ToString());
+                    return exe != null && string.Equals(Path.GetDirectoryName(exe), Install.Dir, StringComparison.OrdinalIgnoreCase);
                 }
             }
             catch (Exception) { return false; }
@@ -209,11 +261,81 @@ namespace TimePlanner.Core
                 using (RegistryKey k = Registry.CurrentUser.CreateSubKey(RunKey))
                 {
                     if (k == null) return;
-                    if (on) k.SetValue(RunName, "\"" + exePath + "\" --tray");
-                    else k.DeleteValue(RunName, false);
+                    if (on)
+                    {
+                        k.SetValue(Install.AutoStartName, "\"" + exePath + "\" --tray");
+                        // 老版本只注册了公共的那一个名字。要是那条指的正是我自己（说明这次是
+                        // 原地升级），就撤掉，免得以后登录时把自己启动两遍；指向别的版本目录的
+                        // 条目不动——那是另一条线自己的自启，归它管。
+                        object legacy = k.GetValue(LegacyRunName);
+                        if (legacy != null && SameDir(legacy.ToString(), exePath)) k.DeleteValue(LegacyRunName, false);
+                    }
+                    else
+                    {
+                        k.DeleteValue(Install.AutoStartName, false);
+                    }
                 }
             }
             catch (Exception) { }
+        }
+
+        /// <summary>从自启条目里那句命令行里抠出 exe 路径（"C:\...\TimePlanner.exe" --tray）。</summary>
+        static string ExePathOf(string command)
+        {
+            if (command == null) return null;
+            string c = command.Trim();
+            if (c.Length == 0) return null;
+            if (c.StartsWith("\""))
+            {
+                int end = c.IndexOf('"', 1);
+                c = end > 1 ? c.Substring(1, end - 1) : c.Substring(1);
+            }
+            else
+            {
+                int sp = c.IndexOf(' ');
+                if (sp > 0) c = c.Substring(0, sp);
+            }
+            c = c.Trim();
+            return c.Length == 0 ? null : c;
+        }
+
+        /// <summary>那条自启指的是不是我这个目录（老版本换新版 exe 名字时也能对上）。</summary>
+        static bool SameDir(string command, string exePath)
+        {
+            string a = ExePathOf(command);
+            string b = exePath;
+            if (a == null || b == null) return false;
+            try
+            {
+                return string.Equals(Path.GetDirectoryName(a), Path.GetDirectoryName(b), StringComparison.OrdinalIgnoreCase);
+            }
+            catch (Exception) { return false; }
+        }
+
+        /// <summary>
+        /// 除了我这条，还有哪些 TimePlanner 的自启条目（别别的版本注册的）。
+        /// 设置页拿它提个醒：不然用户会以为「我只开了一个自启」，其实两三个版本都在跟着开机。
+        /// </summary>
+        public static string[] OtherAutoStartNames()
+        {
+            List<string> names = new List<string>();
+            try
+            {
+                using (RegistryKey k = Registry.CurrentUser.OpenSubKey(RunKey, false))
+                {
+                    if (k == null) return names.ToArray();
+                    string[] all = k.GetValueNames();
+                    for (int i = 0; i < all.Length; i++)
+                    {
+                        string n = all[i];
+                        if (n == null || n.Length == 0) continue;
+                        if (string.Equals(n, Install.AutoStartName, StringComparison.OrdinalIgnoreCase)) continue;
+                        if (n.StartsWith("TimePlanner", StringComparison.OrdinalIgnoreCase)) names.Add(n);
+                    }
+                }
+            }
+            catch (Exception) { }
+            return names.ToArray();
         }
 
         [DllImport("psapi.dll")]
