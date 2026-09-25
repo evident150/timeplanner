@@ -6,7 +6,7 @@
   `powershell -NoProfile -ExecutionPolicy Bypass -File sync-classic.ps1`：把内核文件与
   `[需要移植]` 的界面改动同步进 `work/classic` 并编译验证 —— 经典版这条线始终是「最新、能跑」的那条。
 - **特别版只在用户点名时才动**：没说就别改 `TimePlanner/version.txt`、别跑 `release.ps1`、别打包。
-  特别版的编号由用户统一规定，现在是 `sp1`、`sp2` …（见 `CHANGELOG.md`）。
+  特别版的编号由用户统一规定，现在是 `sp2`、`sp3` …（见 `CHANGELOG.md`）。
 - **不要主动 commit / push。** 小改动只在本地改、本地编译验证，攒着就行。
 - 用户说「推新版」时，才一次性把这些一起更新（两条线各自发各自的，**经典版在前**）：
   1. **先写 `CHANGELOG.md`**（仓库根，唯一的更新日志）：两条线各自的版本段落 + 每条标 `[内核]` /
@@ -37,13 +37,13 @@
 - 旧标签 `v1.5` 别删（发行版和外面的链接还指着它）；`v1.6` / `v1.7` 已经改名成
   `special/v1.6` / `special/v1.7`：**2026-09-24 已经办完** —— 远端旧名删了
   （`git push origin :refs/tags/v1.6 :refs/tags/v1.7`），那两条老发行版也 PATCH 成新标签名了，
-  远端现在只有 `v1.5`、`classic/v1.5.2`、`special/sp1`、`special/v1.6`、`special/v1.7`。
+  远端现在有 `v1.5`、`classic/v1.5.2`、`classic/v1.5.3`、`special/sp1`、`special/sp2`、`special/v1.6`、`special/v1.7`。
   以后再改标签名，记得把指着它的发行版一起 PATCH 过去，别让发行版悬空。
 
 ## 两条产品线（版本隔离）
 
-- **当前版本（2026-09-24）**：特别版最新 `sp1`（标签 `special/sp1`，交付物 `TimePlanner-sp1-special-app.zip`，
-  也是 GitHub 上的「最新」）；经典版最新 `1.5.2`（标签 `classic/v1.5.2`，交付物 `TimePlanner-1.5.2-classic.zip`）。
+- **当前版本（2026-09-25）**：特别版最新 `sp2`（标签 `special/sp2`，交付物 `TimePlanner-sp2-special-app.zip`，
+  也是 GitHub 上的「最新」）；经典版最新 `1.5.3`（标签 `classic/v1.5.3`，交付物 `TimePlanner-1.5.3-classic.zip`）。
 - **两条线、两个版本序列，各走各的**：
   **特别版**（本仓库主线 `main`）= 圣旨皮肤 + 小人，序列 1.6 → 1.7 → sp1 → sp2 …（1.8 就是 sp1），
   标签 `special/sp<n>`（1.6、1.7 那两个老标签还是 `special/v1.6`、`special/v1.7`），
@@ -56,6 +56,13 @@
   AutoStartName`（= 版别 + 安装目录短哈希；**故意不含版本号**——原地换新版 exe 仍是同一个身份，
   升级时不会新旧两个一起跑）。找同名进程一律走 `Install.Siblings`，
   别再用 `Process.GetProcessesByName` 裸查名字 —— 那会误杀别的版本目录里的插件。
+- **exe 只有一个运行位置（2026-09-25 用户定的）**：经典版 `C:\Users\24889\Documents\Codex\TimePlanner-1.5-classic\`、
+  特别版 `C:\Users\24889\Documents\Codex\TimePlanner-special\` —— 都在工作区外面、目录名不带日期也不带版本号。
+  发版 / 更新完就把 exe 铺过去：特别版 `release.ps1`（第 8 步，默认就铺 `TimePlanner-special`，
+  `-InstallDir` 换地方、`-NoInstall` 只打包不铺）；经典版 `sync-classic.ps1 -InstallDir "<目录>"`（第 7 步）。
+  两边都是「停掉那个目录里跑着的实例 → 旧 exe 备份成 `*.bak-<时间戳>` → 铺 → 拉起来」。
+  日期只用来开日志 / 产物 / 快照那些目录，**exe 别放日期目录里**（`2026-09-15\wo-x\TimePlanner\dist`
+  只是编译产物，不是给人长期双击的地方）。
 - 数据只有一份（`%APPDATA%\TimePlanner\data.json`），两条线共用，**别做按版本分家的数据目录**。
 - 经典版源码树：`work/classic`（`git worktree`，detached 在 `classic/v1.5`）。同步脚本会往里拷
   内核文件、迁移入口、再把 `[需要移植]` 的界面改动按文字替换搬过去（脚本第 3.5 节）；那棵树里的

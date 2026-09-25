@@ -68,9 +68,48 @@ powershell -NoProfile -ExecutionPolicy Bypass -File sync-classic.ps1 -Version 1.
 
 ---
 
+## 未发布
+
+（两条线的功能改动都已经发出去：特别版见 `sp2`，经典版见 `1.5.3`。）
+
+### 工具链 / 这台机器上的约定（不进版本段）
+### 打包 / 运行目录（工具链改动，两条线都适用）
+
+- **特别版的 exe 从这一版起固定放 `C:\Users\24889\Documents\Codex\TimePlanner-special\`**（跟经典版那份
+  `TimePlanner-1.5-classic\` 并列，工作区外面、目录名不带日期）：`release.ps1` 新增第 8 步，发完版自动把
+  exe / 使用说明 / README / 启动 cmd / CHANGELOG 铺过去（在那儿跑着的实例先停、旧 exe 备份成
+  `*.bak-<时间戳>`、铺完再拉起来）；`-InstallDir` 可以换地方，`-NoInstall` 只打包不铺。
+  日期只留给日志 / 产物 / 快照那些目录，**exe 不放日期目录里** —— 以前特别版的 exe 只躺在
+  `2026-09-15\wo-x\TimePlanner\dist\` 这种按日期开的会话目录里，换个工作区就找不着了。
+  经典版那条照旧：`sync-classic.ps1 -InstallDir "C:\Users\24889\Documents\Codex\TimePlanner-1.5-classic"`。
+
+---
+
 ## 已发布
 
 ### 特别版序列
+
+#### 特别版 sp2（2026-09-25）· 标签 `special/sp2`
+
+- 这一版把**先落在经典版源码里的那两处界面改动**跟上（`sync-classic.ps1` 那条线先改先验，
+  特别版照搬同一份代码）：
+
+- `[需要移植]` **左下角加了「保存计划」按钮**：改动平时是自动落盘的（`Store.ScheduleSave`），
+  这个按钮是「现在就写」的手动兜底 —— 点一下立刻 `Store.Flush()`，把内存里的计划写进
+  `%APPDATA%\TimePlanner\data.json`（鼠标停在按钮上能看到完整路径），按钮下面回一句
+  「已保存到本地 · 时刻」；写不下去时侧栏那块红字照旧会说话，不报假喜。
+
+- `[需要移植]` **输入完不再跳回页面顶部**（今日 / 本周 / 项目档案 / 已完成 / 设置，五个页面一个治法）：
+  以前每趟重画都新建一个滚动区、靠「画之前先把位置读回来、画完再设回去」找位置，而新滚动区要等
+  布局量过内容才认 `VerticalOffset`，赶上一趟刷新就把记下的位置覆盖成 0 —— 档案页的行内输入框
+  一次回车要触发两趟重画（Store 改动一趟、`Submitted` 里再一趟），最容易撞上。现在每页留一个
+  滚动区、重画只换里面的正文（`MainWindow.KeepScroll`），位置由滚动区自己带着。
+
+- **exe 的固定落点**：特别版从这一版起固定放在 `C:\Users\24889\Documents\Codex\TimePlanner-special\`
+  （跟经典版的 `TimePlanner-1.5-classic\` 并列），`release.ps1` 第 8 步发完版自动铺过去。
+  日期只留给日志 / 产物 / 快照那些目录。
+
+- 数据结构没变（还是 v1），跟经典版共用 `%APPDATA%\TimePlanner\data.json`，两条线换着用都不丢数据。
 
 #### 特别版 sp1（2026-09-24）· 标签 `special/sp1`
 
@@ -159,6 +198,26 @@ powershell -NoProfile -ExecutionPolicy Bypass -File sync-classic.ps1 -Version 1.
 - `[内核]` 无。
 
 ### 经典版序列
+
+#### 经典版 1.5.3（2026-09-25）· 标签 `classic/v1.5.3`
+
+- `[需要移植]` **左下角加了「保存计划」按钮**：改动平时是自动落盘的（`Store.ScheduleSave`），
+  这个按钮是「现在就写」的手动兜底 —— 点一下立刻 `Store.Flush()`，把内存里的计划写进
+  `%APPDATA%\TimePlanner\data.json`（鼠标停在按钮上能看到完整路径），按钮下面回一句
+  「已保存到本地 · 时刻」；写不下去时侧栏那块红字照旧会说话，不报假喜。
+
+- `[需要移植]` **输入完不再跳回页面顶部**（今日 / 本周 / 项目档案 / 已完成 / 设置，五个页面一个治法）：
+  以前每趟重画都新建一个滚动区、靠「画之前先把位置读回来、画完再设回去」找位置，而新滚动区要等
+  布局量过内容才认 `VerticalOffset`，赶上一趟刷新就把记下的位置覆盖成 0 —— 档案页的行内输入框
+  一次回车要触发两趟重画（Store 改动一趟、`Submitted` 里再一趟），最容易撞上。现在每页留一个
+  滚动区、重画只换里面的正文（`MainWindow.KeepScroll`），位置由滚动区自己带着。
+
+- **exe 的固定落点**：经典版固定放在 `C:\Users\24889\Documents\Codex\TimePlanner-1.5-classic\`
+  （跟特别版的 `TimePlanner-special\` 并列）；换新版就
+  `sync-classic.ps1 -InstallDir "C:\Users\24889\Documents\Codex\TimePlanner-1.5-classic"`，
+  旧 exe 会先备份成 `*.bak-<时间戳>`。日期只留给日志 / 产物 / 快照那些目录。
+
+- 数据结构没变（还是 v1），跟特别版共用 `%APPDATA%\TimePlanner\data.json`，两条线换着用都不丢数据。
 
 #### 经典版 1.5.2（2026-09-24）· 标签 `classic/v1.5.2`
 

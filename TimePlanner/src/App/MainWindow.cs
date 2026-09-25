@@ -30,6 +30,7 @@ namespace TimePlanner.App
         StackPanel pageActions;
         StackPanel navList;
         StackPanel sideFoot;
+        string saveNote;                            // 手动存盘后的回执（「已保存到本地 · 时刻」）：侧栏一重画就没了，得记着
         Border mascotBox;
         TextBlock mascotText;
         TextBlock mascotSign;
@@ -44,7 +45,7 @@ namespace TimePlanner.App
         int projectAddKind = ProjectKind.Sub;       // 加的是小项目还是分段
         string projectRenameId;                     // 项目页：正在改名哪个节点（null = 没在改）
         string paintedPage = "";                                                    // 当前真正显示在 contentHost 里的页面
-        readonly Dictionary<string, double> scrollMemo = new Dictionary<string, double>();   // 每个页面各记各的滚动位置
+        readonly Dictionary<string, ScrollViewer> pageScrollers = new Dictionary<string, ScrollViewer>();   // 每页一个滚动区：重画只换里面的内容，位置由它自己带着
 
         public MainWindow(Store store, bool startHidden)
         {
@@ -580,7 +581,6 @@ namespace TimePlanner.App
             PaintNav();
             PaintSideFoot();
             PaintMascot();
-            RememberScroll();
 
             UIElement body;
             if (Page == "week") { WeekAnchor = TaskQuery.WeekStart(WeekAnchor, Store.Settings.WeekStartMonday); body = BuildWeekPage(); }
@@ -588,37 +588,37 @@ namespace TimePlanner.App
             else if (Page == "done") body = BuildDonePage();
             else if (Page == "settings") body = BuildSettingsPage();
             else body = BuildTodayPage();
-            contentHost.Child = body;
+            UIElement view = KeepScroll(Page, body);        // 只换正文、留着滚动区：重画、打字回车都不会跳回顶部
+            if (!object.ReferenceEquals(contentHost.Child, view)) contentHost.Child = view;
             paintedPage = Page;
-            RestoreScroll(body);
 
             if (addFocused && AddBox != null) AddBox.FocusInput();
         }
 
-        /// <summary>重建页面前记住滚动位置（拖动任务改期、勾选完成后页面不该跳回顶部）。</summary>
-        void RememberScroll()
+        /// <summary>
+        /// 页面正文都裹在 Ui.Scroll 里。重画的时候只把里面的内容换掉，滚动区本身留着接着用 ——
+        /// 位置由这个滚动区自己带着，每页各记各的。
+        /// 以前是每趟都新建一个滚动区、靠「先读回位置、画完再设回去」找位置：新滚动区要等布局量过
+        /// 内容才认 VerticalOffset，量之前读回来是 0，赶上一次刷新就把记下的位置覆盖成 0，
+        /// 于是打完字一回车（Store 改动一次 + Submitted 里再刷一次）整页跳回顶部。留着滚动区就没这回事。
+        /// </summary>
+        UIElement KeepScroll(string page, UIElement body)
         {
-            if (contentHost == null || paintedPage.Length == 0) return;
-            ScrollViewer sv = Ui.Find<ScrollViewer>(contentHost);
-            if (sv != null) scrollMemo[paintedPage] = sv.VerticalOffset;
-        }
-
-        /// <summary>把新页面的滚动条放回上次的位置；每页各记各的，切换页面时回到该页自己的位置。</summary>
-        void RestoreScroll(UIElement body)
-        {
-            if (body == null) return;
-            double want;
-            if (!scrollMemo.TryGetValue(Page, out want) || want <= 0.5) return;
-            ScrollViewer sv = Ui.Find<ScrollViewer>(body);
-            if (sv == null) return;
-            ScrollViewer target = sv;
-            target.UpdateLayout();
-            target.ScrollToVerticalOffset(want);
-            // 内容测量完成后才能滚到正确位置，所以在布局之后再补一次
-            Dispatcher.BeginInvoke(DispatcherPriority.Loaded, new Action(delegate()
+            ScrollViewer fresh = body as ScrollViewer;
+            if (fresh == null) { pageScrollers.Remove(page); return body; }
+            ScrollViewer keep;
+            if (!pageScrollers.TryGetValue(page, out keep) || keep == null)
             {
-                if (target.VerticalOffset != want) target.ScrollToVerticalOffset(want);
-            }));
+                pageScrollers[page] = fresh;
+                return fresh;
+            }
+            UIElement inner = fresh.Content as UIElement;
+            if (inner != null)
+            {
+                fresh.Content = null;           // 先撒手再交出去，免得撞上「已经是别人的子元素」
+                keep.Content = inner;
+            }
+            return keep;
         }
 
         void PaintNav()
@@ -703,6 +703,29 @@ namespace TimePlanner.App
             widget.HorizontalAlignment = HorizontalAlignment.Stretch;
             ((TextBlock)widget.Child).HorizontalAlignment = HorizontalAlignment.Center;
             sideFoot.Children.Add(widget);
+
+            // 手动存盘：改动平时是自动落盘的（Store.ScheduleSave），这里给个「现在就写」的按钮 ——
+            // 点一下立刻写文件，顺手把写去哪儿、写没写成摆在明面上，省得数据在不在本地全靠猜。
+            Border save = Ui.TextButton("保存计划", delegate()
+            {
+                Store.Flush();
+                saveNote = Store.WriteError == null && !Store.ReadOnly
+                    ? "已保存到本地 · " + Fmt.Clock(DateTime.Now)
+                    : null;                            // 写不下去的话，下面那块红字会说，不报假喜
+                PaintSideFoot();
+            }, false);
+            save.HorizontalAlignment = HorizontalAlignment.Stretch;
+            save.Margin = new Thickness(0, 8, 0, 0);
+            ((TextBlock)save.Child).HorizontalAlignment = HorizontalAlignment.Center;
+            Ui.Tip(save, "把当前计划立刻写进本地文件：\n" + Store.DataFile);
+            sideFoot.Children.Add(save);
+            if (saveNote != null)
+            {
+                TextBlock note = Ui.Txt(saveNote, 11, Theme.B(Theme.TextFaint), false);
+                note.HorizontalAlignment = HorizontalAlignment.Center;
+                note.Margin = new Thickness(0, 6, 0, 0);
+                sideFoot.Children.Add(note);
+            }
 
             // 存盘失败必须让用户看见：否则改动只在内存里，一重启就没了。
             string err = Store.WriteError;

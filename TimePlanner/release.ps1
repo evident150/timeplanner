@@ -12,17 +12,23 @@
   6. 自动删掉 outputs\ 里其它版本的目录和压缩包（只认 outputs 正下方、
      名字是 TimePlanner-<版本> 的目录 / TimePlanner-<版本>-*.zip，
      screenshots\、README.md 和经典版（*-classic*）不碰；加 -DryRun 可以只看不删）
+  7. 把 dist\ 里的 exe 铺到「固定运行目录」（默认 ..\..\TimePlanner-special\，见 AGENTS.md）：
+     在那儿跑着的实例先停、旧 exe 备份成 *.bak-<时间戳>、铺完再拉起来。exe 只放这一个地方，
+     日期留给日志 / 产物 / 快照那些目录用。-InstallDir 换地方，-NoInstall 只打包不铺。
 
   用法：
     powershell -ExecutionPolicy Bypass -File release.ps1
     powershell -ExecutionPolicy Bypass -File release.ps1 -Version 1.5
     powershell -ExecutionPolicy Bypass -File release.ps1 -DryRun
+    powershell -ExecutionPolicy Bypass -File release.ps1 -NoInstall    （只打包，不铺固定目录）
 #>
 param(
     [string]$Version,
     [switch]$SkipBuild,
     [switch]$SkipShots,
-    [switch]$DryRun
+    [switch]$DryRun,
+    [string]$InstallDir = "",
+    [switch]$NoInstall
 )
 
 $ErrorActionPreference = "Stop"
@@ -169,7 +175,7 @@ $keep = @($name, $appZip, $srcZip)
 $deleted = 0
 foreach ($item in @(Get-ChildItem -LiteralPath $outFull)) {
     if ($keep -contains $item.Name) { continue }
-    if ($item.Name -notmatch '^TimePlanner-\d+(\.\d+)*') { continue }
+    if ($item.Name -notmatch '^TimePlanner-(\d+(\.\d+)*|sp\d+)') { continue }
     if ($item.Name -like '*-classic*') { continue }   # 经典版是另一条线，不归这里清
     if ((Split-Path -Parent $item.FullName) -ne $outFull) { continue }
     if ($DryRun) { Write-Host ("    [干跑] 会删除 " + $item.Name) -ForegroundColor Yellow; continue }
@@ -179,10 +185,45 @@ foreach ($item in @(Get-ChildItem -LiteralPath $outFull)) {
 }
 if ($deleted -eq 0 -and -not $DryRun) { Write-Host "    没有需要清理的旧版本" }
 
-# ---------- 8. 把刚才停掉的实例拉起来 ----------
+# ---------- 8. 铺到固定运行目录（exe 只放这一个地方，别散在日期目录里） ----------
+# 这台机器上的约定（见 AGENTS.md）：特别版 ..\..\TimePlanner-special\，经典版 ..\..\TimePlanner-1.5-classic\。
+$specialDir = $InstallDir
+if (-not $specialDir) { $specialDir = Join-Path (Split-Path -Parent (Split-Path -Parent $root)) "TimePlanner-special" }
+$installedHere = $false
+if ($NoInstall) {
+    Write-Host "  跳过固定运行目录（-NoInstall）"
+} elseif (-not (Test-Path -LiteralPath $specialDir)) {
+    Write-Warning ("  固定运行目录不存在，没铺：" + $specialDir)
+} elseif (-not $DryRun) {
+    $there = @(Get-Process TimePlanner, TimePlanner.Widget -ErrorAction SilentlyContinue | Where-Object {
+        try { $_.Path -and $_.Path.StartsWith($specialDir, [System.StringComparison]::OrdinalIgnoreCase) } catch { $false }
+    })
+    if ($there.Count -gt 0) {
+        Write-Host ("  停掉固定目录里的实例：" + (($there | ForEach-Object { $_.ProcessName + "(" + $_.Id + ")" }) -join ", "))
+        $there | Stop-Process -Force -ErrorAction SilentlyContinue
+        Start-Sleep -Milliseconds 500
+        $installedHere = $true
+    }
+    $stamp = Get-Date -Format "yyyyMMdd-HHmmss"
+    foreach ($f in @("TimePlanner.exe", "TimePlanner.Widget.exe", "使用说明.txt", "README.md", "启动时间规划.cmd")) {
+        $s = Join-Path $dist $f
+        if (-not (Test-Path -LiteralPath $s)) { Write-Warning ("    缺文件：" + $f); continue }
+        $d = Join-Path $specialDir $f
+        if ((Test-Path -LiteralPath $d) -and $f.EndsWith(".exe")) { Copy-Item -LiteralPath $d -Destination ($d + ".bak-" + $stamp) -Force }
+        Copy-Item -LiteralPath $s -Destination $d -Force
+    }
+    if (Test-Path $changeLog) { Copy-Item -LiteralPath $changeLog -Destination (Join-Path $specialDir "CHANGELOG.md") -Force }
+    Write-Host ("  铺到 " + $specialDir + "（旧 exe 备份成 *.bak-" + $stamp + "）")
+}
+
+# ---------- 9. 把刚才停掉的实例拉起来 ----------
 if ($wasRunning -and -not $DryRun) {
     Start-Process -FilePath (Join-Path $dist "TimePlanner.exe") -ArgumentList "--tray" -WindowStyle Hidden
-    Write-Host "  已重新启动（托盘）"
+    Write-Host "  已重新启动（托盘，dist）"
+}
+if ($installedHere) {
+    Start-Process -FilePath (Join-Path $specialDir "TimePlanner.exe") -ArgumentList "--tray" -WindowStyle Hidden
+    Write-Host ("  已重新启动（托盘，" + $specialDir + "）")
 }
 
 Write-Host ""
@@ -191,4 +232,5 @@ Write-Host ("  outputs\" + $name + "\")
 Write-Host ("  outputs\" + $appZip)
 Write-Host ("  outputs\" + $srcZip)
 Write-Host "  outputs\screenshots\"
+if (-not $NoInstall -and (Test-Path -LiteralPath $specialDir)) { Write-Host ("  " + $specialDir + "\") }
 

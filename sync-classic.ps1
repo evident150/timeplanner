@@ -517,6 +517,28 @@ Swap 'src\App\MainWindow.cs' $mSignErrOld $mSignErrNew "主程序：签名里带
 $mWarnOld = '            sideFoot.Children.Add(widget);'
 $mWarnNew = Blk @(
 '            sideFoot.Children.Add(widget);'
+'            // 手动存盘：改动平时是自动落盘的（Store.ScheduleSave），这里给个「现在就写」的按钮 ——'
+'            // 点一下立刻写文件，顺手把写去哪儿、写没写成摆在明面上，省得数据在不在本地全靠猜。'
+'            Border save = Ui.TextButton("保存计划", delegate()'
+'            {'
+'                Store.Flush();'
+'                saveNote = Store.WriteError == null && !Store.ReadOnly'
+'                    ? "已保存到本地 · " + Fmt.Clock(DateTime.Now)'
+'                    : null;                            // 写不下去的话，下面那块红字会说，不报假喜'
+'                PaintSideFoot();'
+'            }, false);'
+'            save.HorizontalAlignment = HorizontalAlignment.Stretch;'
+'            save.Margin = new Thickness(0, 8, 0, 0);'
+'            ((TextBlock)save.Child).HorizontalAlignment = HorizontalAlignment.Center;'
+'            Ui.Tip(save, "把当前计划立刻写进本地文件：\n" + Store.DataFile);'
+'            sideFoot.Children.Add(save);'
+'            if (saveNote != null)'
+'            {'
+'                TextBlock note = Ui.Txt(saveNote, 11, Theme.B(Theme.TextFaint), false);'
+'                note.HorizontalAlignment = HorizontalAlignment.Center;'
+'                note.Margin = new Thickness(0, 6, 0, 0);'
+'                sideFoot.Children.Add(note);'
+'            }'
 ''
 '            // 存盘失败必须让用户看见：否则改动只在内存里，一重启就没了。'
 '            string err = Store.WriteError;'
@@ -531,6 +553,76 @@ $mWarnNew = Blk @(
 '                sideFoot.Children.Add(warn);'
 '            }')
 Swap 'src\App\MainWindow.cs' $mWarnOld $mWarnNew "主程序：存盘失败的侧栏红字"
+
+# 左下角「保存计划」按钮的回执文本（「已保存到本地 · 时刻」）：侧栏每次重画都是整块重建，
+# 不留个字段记着的话，按一下按钮回执当场就没了 —— 按钮本身并进上面那段 $mWarn（同一块地方，一处换完）。
+$mSaveFieldOld = '        StackPanel sideFoot;'
+$mSaveFieldNew = Blk @(
+'        StackPanel sideFoot;'
+'        string saveNote;                            // 手动存盘后的回执（「已保存到本地 · 时刻」）：侧栏一重画就没了，得记着')
+Swap 'src\App\MainWindow.cs' $mSaveFieldOld $mSaveFieldNew "主程序：手动存盘的回执字段"
+# 输入框里回完车页面跳回顶部：以前每趟刷新都新建一个滚动区，位置靠「画之前先把位置读回来、画完再设回去」。
+# 可新滚动区要等布局量过内容才认 VerticalOffset，量之前读回来是 0 —— 赶上一趟刷新就把记下的位置覆盖成 0
+#（档案页「Store 改动一次 + Submitted 里再刷一次」最容易撞上），下一趟恢复就直接跳过，页面跳回顶部。
+# 现在改成：每页留一个滚动区，重画只把里面的内容换掉，位置由滚动区自己带着，压根不用读回来。
+#（上一版是「pendingScroll 那几个记号字段」的写法，先按那一版换一遍 —— -Soft：树上没有就跳过。）
+$mScrollFieldGuard = Blk @(
+'        readonly Dictionary<string, double> scrollMemo = new Dictionary<string, double>();   // 每个页面各记各的滚动位置'
+'        string pendingScrollPage = "";                                              // 刚请求恢复、布局还没落地的那一页'
+'        double pendingScrollTarget = -1;                                            // 请求恢复到的位置（落地前 VerticalOffset 会读成 0）')
+$mScrollFieldRaw = '        readonly Dictionary<string, double> scrollMemo = new Dictionary<string, double>();   // 每个页面各记各的滚动位置'
+$mScrollFieldNew = '        readonly Dictionary<string, ScrollViewer> pageScrollers = new Dictionary<string, ScrollViewer>();   // 每页一个滚动区：重画只换里面的内容，位置由它自己带着'
+Swap 'src\App\MainWindow.cs' $mScrollFieldGuard $mScrollFieldNew "主程序：每页留一个滚动区（收掉上一版那几个记号字段）" "" -Soft
+Swap 'src\App\MainWindow.cs' $mScrollFieldRaw $mScrollFieldNew "主程序：每页留一个滚动区"
+
+# RememberScroll / RestoreScroll 整块换成 KeepScroll。
+# 块头那一行（/// <summary>重建页面前记住滚动位置…）是 Region 定位用的锚，重铺时原样保留、别改。
+$mScrollMethodsNew = Blk @(
+'        /// <summary>重建页面前记住滚动位置（拖动任务改期、勾选完成后页面不该跳回顶部）。</summary>'
+'        // 页面正文都裹在 Ui.Scroll 里：重画的时候只把里面的内容换掉，滚动区本身留着接着用，位置由它自己带着。'
+'        // 以前是每趟都新建一个滚动区、靠「先读回位置、画完再设回去」：新滚动区要等布局量过内容才认'
+'        // VerticalOffset，量之前读回来是 0，赶上一趟刷新就把记下的位置覆盖成 0 —— 于是打完字一回车'
+'        //（Store 改动一次 + Submitted 里再刷一次）整页跳回顶部。留着滚动区就没这回事。'
+'        UIElement KeepScroll(string page, UIElement body)'
+'        {'
+'            ScrollViewer fresh = body as ScrollViewer;'
+'            if (fresh == null) { pageScrollers.Remove(page); return body; }'
+'            ScrollViewer keep;'
+'            if (!pageScrollers.TryGetValue(page, out keep) || keep == null)'
+'            {'
+'                pageScrollers[page] = fresh;'
+'                return fresh;'
+'            }'
+'            UIElement inner = fresh.Content as UIElement;'
+'            if (inner != null)'
+'            {'
+'                fresh.Content = null;           // 先撒手再交出去，免得撞上「已经是别人的子元素」'
+'                keep.Content = inner;'
+'            }'
+'            return keep;'
+'        }')
+Region 'src\App\MainWindow.cs' '        /// <summary>重建页面前记住滚动位置' '        void PaintNav()' $mScrollMethodsNew "主程序：每页留一个滚动区（重画只换正文）"
+
+$mScrollCallOld = Blk @(
+'            PaintSideFoot();'
+'            RememberScroll();'
+''
+'            UIElement body;')
+# 新写法（回完车那行不再先读回位置）也得当路标用：单独一行 UIElement body; 满文件都是，认不准。
+$mScrollCallNew = Blk @(
+'            PaintSideFoot();'
+'            UIElement body;')
+Swap 'src\App\MainWindow.cs' $mScrollCallOld $mScrollCallNew "主程序：不再先读回滚动位置"
+
+$mScrollHostOld = Blk @(
+'            contentHost.Child = body;'
+'            paintedPage = Page;'
+'            RestoreScroll(body);')
+$mScrollHostNew = Blk @(
+'            UIElement view = KeepScroll(Page, body);        // 只换正文、留着滚动区：重画、打字回车都不会跳回顶部'
+'            if (!object.ReferenceEquals(contentHost.Child, view)) contentHost.Child = view;'
+'            paintedPage = Page;')
+Swap 'src\App\MainWindow.cs' $mScrollHostOld $mScrollHostNew "主程序：重画只换正文、留着滚动区"
 
 
 $wHookOld = '            showDone = store.Settings.WidgetShowDone;'
