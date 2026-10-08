@@ -98,3 +98,7 @@
   先 `git archive --format=tar -o x.tar <提交>` 再 `tar -xf x.tar -C <目录>`。
 - `csc` 的报错是 GBK，重定向时注意乱码。
 - 交付物：`outputs/` 里只留当前版本；`exe/` 是提交进 git 的免编译包，别往里塞旧版。
+- **仓库里的截图分两条线**（2026-10-08 起）：`outputs/screenshots/` 是特别版（圣旨皮肤，`release.ps1` 自动出），
+  `outputs/screenshots-classic/` 是经典版（深色卡片，从 `work/classic/TimePlanner/dist` 那两份 exe 用
+  `--render` 出来，手动更新，跟着经典版发版一起刷）—— 别拿特别版那套图当经典版的。
+  两套图都必须是渲染模式 + 内置示例数据（`Store.DataDirOverride`），用户的真实任务绝不进仓库。

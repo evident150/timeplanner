@@ -98,10 +98,16 @@ powershell -ExecutionPolicy Bypass -File sync-classic.ps1 -Version 1.5.1 -Releas
 
 ## 截图
 
-| 项目档案 | 本周 | 桌面挂件 · 右键菜单 | 完成任务 |
+两条线各出一套图：`outputs/screenshots/` 是**特别版**（圣旨皮肤 + 小人），`outputs/screenshots-classic/` 是**经典版**（1.5 那套深色卡片，没有圣旨皮肤、没有小人）。两套都是渲染模式 + 内置示例数据出的，不是谁的真实任务。
+
+**特别版（圣旨皮肤，主线）**
+
+| 云端共用（sp3 起） | 今日 · 圣旨 | 项目档案 | 桌面挂件 · 右键菜单 |
 | --- | --- | --- | --- |
-| ![项目档案](outputs/screenshots/main-project.png) | ![本周](outputs/screenshots/main-week.png) | ![菜单](outputs/screenshots/widget-menu.png) | ![礼花](outputs/screenshots/main-firework-2.png) |
+| ![特别版 · 云端共用](outputs/screenshots/main-account.png) | ![特别版 · 今日圣旨](outputs/screenshots/main-today.png) | ![特别版 · 项目档案](outputs/screenshots/main-project.png) | ![特别版 · 菜单](outputs/screenshots/widget-menu.png) |
 
-云端共用那一页（sp3 起）：
+**经典版（1.5 深色卡片）**
 
-![云端共用](outputs/screenshots/main-account.png)
+| 云端共用（1.5.4 起） | 今日 | 项目档案 | 桌面挂件 · 右键菜单 |
+| --- | --- | --- | --- |
+| ![经典版 · 云端共用](outputs/screenshots-classic/main-account.png) | ![经典版 · 今日](outputs/screenshots-classic/main-today.png) | ![经典版 · 项目档案](outputs/screenshots-classic/main-project.png) | ![经典版 · 菜单](outputs/screenshots-classic/widget-menu.png) |

@@ -89,6 +89,11 @@ powershell -NoProfile -ExecutionPolicy Bypass -File sync-classic.ps1 -Version 1.
 - **加了页面记得补出图清单**：`Program.cs --render` 的页面数组和 `release.ps1` 的截图对照表都补了
   `main-account.png`（云端共用页）—— 页面是新的，截图这边不加就会一直少一张。
 
+- **仓库里的截图分两条线**：`outputs/screenshots/` 是特别版（圣旨皮肤，`release.ps1` 自动出）；
+  新增 `outputs/screenshots-classic/` 放经典版那套（深色卡片，从经典版 exe 用 `--render` 出），
+  免得看仓库的人以为「经典版也是圣旨那张皮」。两套都出自渲染模式的示例数据，不是用户的真实任务。
+  （经典版那套没有右下角「示例数据」角标 —— 角标是特别版预览代码里的东西，经典版那份预览代码比它老一版。）
+
 - **同步脚本的一处幂等修正**：「项目档案」和「云端共用」两步改的是同一行 `pages` 数组，锚点原先带着
   结尾的 ` };`，第二遍再跑就既不是老写法也不是新写法（报「经典版源码动过了？」）；现在锚点只对到
   引号那一段，重复跑多少遍结果都一样。
