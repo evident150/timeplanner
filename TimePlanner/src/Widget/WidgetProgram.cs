@@ -11,6 +11,10 @@ namespace TimePlanner.Widget
 {
     public static class WidgetProgram
     {
+        // 单实例的互斥体必须挂在静态字段上：只放局部变量的话，Release 下它一旦不再被引用
+        // 就会被 GC 收掉，句柄一关，这道闸门就悄悄失效了（点两下会冒出两个插件）。
+        static Mutex instanceMutex;
+
         [STAThread]
         public static void Main(string[] args)
         {
@@ -34,7 +38,7 @@ namespace TimePlanner.Widget
             }
 
             bool created;
-            Mutex single = new Mutex(true, @"Local\TimePlanner.Widget.SingleInstance", out created);
+            instanceMutex = new Mutex(true, Install.WidgetMutex, out created);
             if (!created) return;
 
             Store store = new Store();
@@ -72,6 +76,8 @@ namespace TimePlanner.Widget
         static void Demo(Store store)
         {
             store.Data.Tasks.Clear();
+            if (store.Data.Projects == null) store.Data.Projects = new System.Collections.Generic.List<ProjectNode>();
+            store.Data.Projects.Clear();
             DateTime today = DateTime.Today;
             string[] titles = new string[] { "整理季度汇报的框架和关键数据", "和产品同步下周排期", "读 30 页《深度工作》", "晚饭后散步 30 分钟", "早上把周报发给组长" };
             int[] prios = new int[] { 2, 1, 0, 0, 0 };
@@ -84,11 +90,22 @@ namespace TimePlanner.Widget
                 if (i >= 3) { t.Done = true; t.DoneAt = DateTime.Now.AddHours(-2); }
                 store.Data.Tasks.Add(t);
             }
+            // 项目里的小项目也是普通事项，插件这一列里它和任务混在一起，只多一枚「归属」小标签
+            ProjectNode big = store.AddProject("", ProjectKind.Big, "毕业设计");
+            big.Steps = 6;                       // 分了份的项目在插件上另起一行，只写「几分之几」
+            big.Reached = 2;
+            ProjectNode stage = store.AddProject(big.Id, ProjectKind.Stage, "开题阶段");
+            stage.Steps = 3;
+            stage.Reached = 1;
+            store.AddProject(stage.Id, ProjectKind.Sub, "查 20 篇相关文献 #论文 !");
+            store.AddProject(big.Id, ProjectKind.Sub, "和导师约一次面谈 #论文");
         }
 
         public static void Run(string dir)
         {
             Store store = new Store();
+            // 出图只用临时目录 + 内置示例数据，连读都不读用户那份 data.json
+            Store.DataDirOverride = Install.PreviewDataDir;
             store.ReadOnly = true;
             store.Load();
             Demo(store);

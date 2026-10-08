@@ -206,6 +206,13 @@ namespace TimePlanner.Core
         public Action<TaskItem> DeferRequested;
         public Action<TaskItem> DoubleClickRequested;
         public Action<TaskRow, TaskItem> DragRequested;
+
+        /// <summary>
+        /// 小项目在行上补一句归属（「毕业设计 / 开题」）。主程序和桌面插件各自挂上自己的数据源；
+        /// 没挂或者这条不是项目的事项，就什么都不显示。
+        /// </summary>
+        public static Func<TaskItem, string> ProjectLabel;
+
         Point dragStart;
         bool dragArmed;
 
@@ -215,6 +222,7 @@ namespace TimePlanner.Core
         readonly StackPanel actions;
         readonly bool compact;
         readonly Border tagPill;
+        readonly Border projPill;
         readonly Border deferButton;
         readonly Grid root;
 
@@ -268,6 +276,9 @@ namespace TimePlanner.Core
             tagPill = Ui.Pill("", Theme.Accent, Theme.AccentSoft);
             tagPill.Margin = new Thickness(0, 0, 6, 0);
             meta.Children.Add(tagPill);
+            projPill = Ui.Pill("", Theme.TextMuted, Theme.Alpha(Theme.TextMuted, 0.13));
+            projPill.Margin = new Thickness(0, 0, 6, 0);
+            meta.Children.Add(projPill);
             content.Children.Add(meta);
             Grid.SetColumn(content, 2);
             root.Children.Add(content);
@@ -375,6 +386,17 @@ namespace TimePlanner.Core
             else
             {
                 tagPill.Visibility = Visibility.Collapsed;
+            }
+
+            string proj = ProjectLabel == null ? "" : ProjectLabel(Item);
+            if (proj != null && proj.Length > 0)
+            {
+                projPill.Visibility = Visibility.Visible;
+                ((TextBlock)projPill.Child).Text = proj;
+            }
+            else
+            {
+                projPill.Visibility = Visibility.Collapsed;
             }
         }
     }

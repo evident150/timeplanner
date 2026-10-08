@@ -1,4 +1,4 @@
-﻿using System;
+﻿﻿﻿using System;
 using System.Collections.Generic;
 using System.Runtime.Serialization;
 
@@ -18,6 +18,8 @@ namespace TimePlanner.Core
         [DataMember(Name = "tag", Order = 7)] public string Tag;
         [DataMember(Name = "sort", Order = 8)] public int Sort;
         [DataMember(Name = "createdAt", Order = 9)] public DateTime CreatedAt;
+        /// <summary>属于哪个项目节点（空 = 普通任务）。有值 = 这是一条「小项目」的事项，跟着项目树一起管理。</summary>
+        [DataMember(Name = "projectId", Order = 10)] public string ProjectId;
 
         public DateTime Day { get { return Date.Date; } }
 
@@ -39,6 +41,7 @@ namespace TimePlanner.Core
             t.Tag = "";
             t.Sort = 0;
             t.CreatedAt = DateTime.Now;
+            t.ProjectId = "";
             return t;
         }
 
@@ -47,7 +50,7 @@ namespace TimePlanner.Core
             TaskItem t = new TaskItem();
             t.Id = Id; t.Title = Title; t.Note = Note; t.Date = Date;
             t.Done = Done; t.DoneAt = DoneAt; t.Priority = Priority;
-            t.Tag = Tag; t.Sort = Sort; t.CreatedAt = CreatedAt;
+            t.Tag = Tag; t.Sort = Sort; t.CreatedAt = CreatedAt; t.ProjectId = ProjectId;
             return t;
         }
 
@@ -58,8 +61,89 @@ namespace TimePlanner.Core
             if (Title == null) Title = "";
             if (Note == null) Note = "";
             if (Tag == null) Tag = "";
+            if (ProjectId == null) ProjectId = "";
             Date = Date.Date;
             if (Priority < 0 || Priority > 2) Priority = 0;
+        }
+    }
+
+    /// <summary>项目节点的级别。</summary>
+    public static class ProjectKind
+    {
+        public const int Big = 0;     // 大项目：顶层容器，下面挂小项目或分段
+        public const int Sub = 1;     // 小项目：最低一级，本身就是一条事项
+        public const int Stage = 2;   // 分段：大项目内部的分组
+
+        public static string Label(int k)
+        {
+            if (k == Big) return "大项目";
+            if (k == Stage) return "分段";
+            return "小项目";
+        }
+
+        /// <summary>容器只用来归拢下級，自己不出现在任务栏里。</summary>
+        public static bool IsContainer(int k) { return k != Sub; }
+    }
+
+    /// <summary>
+    /// 项目树上的一个节点。两种角色：
+    ///   · 容器（大项目 / 分段）—— 只归拢下級，自己不是待办；
+    ///   · 小项目（最低一级）—— 底下挂一条普通事项（ItemId），于是它会像任务一样
+    ///     出现在「今日 / 本周」和桌面插件里，可以勾选、可以拖动改期。
+    /// 节点的名字就取那条事项的标题（单一来源，不会两边对不上）。
+    /// </summary>
+    [DataContract]
+    public class ProjectNode
+    {
+        [DataMember(Name = "id", Order = 0)] public string Id;
+        [DataMember(Name = "parentId", Order = 1)] public string ParentId;
+        [DataMember(Name = "kind", Order = 2)] public int Kind;
+        [DataMember(Name = "itemId", Order = 3)] public string ItemId;
+        [DataMember(Name = "sort", Order = 4)] public int Sort;
+        /// <summary>项目页里是否展开（界面状态，顺手存下来）。</summary>
+        [DataMember(Name = "open", Order = 5)] public bool? Open;
+        /// <summary>节点名（也是它那条事项的标题，两边由 Store 一起改，不会对不上）。</summary>
+        [DataMember(Name = "title", Order = 6)] public string Title;
+        /// <summary>大项目分几份（0 = 没分份）。分了份就能在项目页拖横条记「几分之几」，不必一条条写小项目。</summary>
+        [DataMember(Name = "steps", Order = 7)] public int Steps;
+        /// <summary>已经办到的份数（0..Steps）。</summary>
+        [DataMember(Name = "reached", Order = 8)] public int Reached;
+
+        /// <summary>一份一段最多分多少份（防止手写数据分出一万格）。</summary>
+        public const int MaxSteps = 64;
+
+        public bool IsOpen { get { return Open != false; } }
+        public bool IsContainer { get { return ProjectKind.IsContainer(Kind); } }
+        /// <summary>是不是按份数计（大项目分了几份，或分段那「办完了」的 1 份）。</summary>
+        public bool HasSteps { get { return Kind != ProjectKind.Sub && Steps > 0; } }
+
+        public static ProjectNode Create(string parentId, int kind)
+        {
+            ProjectNode n = new ProjectNode();
+            n.Id = Guid.NewGuid().ToString("N");
+            n.ParentId = parentId == null ? "" : parentId;
+            n.Kind = kind;
+            n.Title = "";
+            n.ItemId = "";
+            n.Sort = 0;
+            n.Open = true;
+            return n;
+        }
+
+        public void Normalize()
+        {
+            if (Id == null || Id.Length == 0) Id = Guid.NewGuid().ToString("N");
+            if (ParentId == null) ParentId = "";
+            if (ItemId == null) ItemId = "";
+            if (Title == null) Title = "";
+            if (Kind != ProjectKind.Big && Kind != ProjectKind.Sub && Kind != ProjectKind.Stage) Kind = ProjectKind.Sub;
+            if (Kind == ProjectKind.Big) ParentId = "";        // 大项目只可能在顶层
+            if (Open == null) Open = true;
+            if (Steps < 0) Steps = 0;
+            if (Steps > MaxSteps) Steps = MaxSteps;
+            if (Reached < 0) Reached = 0;
+            if (Reached > Steps) Reached = Steps;
+            if (Kind == ProjectKind.Sub) { Steps = 0; Reached = 0; }        // 小项目本身就是一条事项，不分份
         }
     }
 
@@ -147,6 +231,8 @@ namespace TimePlanner.Core
         [DataMember(Name = "version", Order = 0)] public int Version;
         [DataMember(Name = "settings", Order = 1)] public Settings Settings;
         [DataMember(Name = "tasks", Order = 2)] public List<TaskItem> Tasks;
+        /// <summary>项目树：大项目 / 分段 / 小项目（小项目挂在 Tasks 里当普通事项）。</summary>
+        [DataMember(Name = "projects", Order = 3)] public List<ProjectNode> Projects;
 
         public static AppData CreateDefault()
         {
@@ -154,6 +240,7 @@ namespace TimePlanner.Core
             d.Version = 1;
             d.Settings = Settings.CreateDefault();
             d.Tasks = new List<TaskItem>();
+            d.Projects = new List<ProjectNode>();
             return d;
         }
 
@@ -168,6 +255,13 @@ namespace TimePlanner.Core
                 if (Tasks[i] == null) { Tasks.RemoveAt(i); i--; continue; }
                 Tasks[i].Normalize();
             }
+            if (Projects == null) Projects = new List<ProjectNode>();
+            for (int i = 0; i < Projects.Count; i++)
+            {
+                if (Projects[i] == null) { Projects.RemoveAt(i); i--; continue; }
+                Projects[i].Normalize();
+            }
+            ProjectTree.Repair(this);
         }
     }
 }

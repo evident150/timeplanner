@@ -30,12 +30,17 @@ namespace TimePlanner.App
         StackPanel pageActions;
         StackPanel navList;
         StackPanel sideFoot;
+        string saveNote;                            // 手动存盘后的回执（「已保存到本地 · 时刻」）：侧栏一重画就没了，得记着
         DispatcherTimer rebuildTimer;
         bool animating;
         string lastSignature = "";
         internal HintBox AddBox;
+        string projectAddParent;                    // 项目页：正在给哪个节点加下級（null = 没在加）
+        int projectAddKind = ProjectKind.Sub;       // 加的是小项目还是分段
+        string projectRenameId;                     // 项目页：正在改名哪个节点（null = 没在改）
+        // [sync-classic] 主程序：项目页的状态字段：7E464D0B92E5（整块由 sync-classic.ps1 从主线搬来，别在这一块里手改）
         string paintedPage = "";                                                    // 当前真正显示在 contentHost 里的页面
-        readonly Dictionary<string, double> scrollMemo = new Dictionary<string, double>();   // 每个页面各记各的滚动位置
+        readonly Dictionary<string, ScrollViewer> pageScrollers = new Dictionary<string, ScrollViewer>();   // 每页一个滚动区：重画只换里面的内容，位置由它自己带着
 
         public MainWindow(Store store, bool startHidden)
         {
@@ -52,6 +57,8 @@ namespace TimePlanner.App
             Foreground = Theme.B(Theme.Text);
             FontFamily = Theme.Font;
             Icon = AppIcon.WpfIcon();
+            // 小项目也是普通事项，行上补一句它属于哪个项目
+            TaskRow.ProjectLabel = delegate(TaskItem t) { return ProjectLabelOf(t); };
             WindowChrome.SetWindowChrome(this, Chrome());
 
             Build();
@@ -254,8 +261,11 @@ namespace TimePlanner.App
             navList.Children.Add(planLabel);
             navList.Children.Add(NavItem("today", "list", "今日"));
             navList.Children.Add(NavItem("week", "calendar", "本周"));
+            navList.Children.Add(NavItem("project", "layers", "项目档案"));
             navList.Children.Add(NavItem("done", "check", "已完成"));
             navList.Children.Add(NavItem("settings", "gear", "设置"));
+            navList.Children.Add(NavItem("account", "refresh", "云端共用"));
+            AccountAuto.Start(this);          // 自动同步跟着主程序走，跟用户停在哪一页无关
             Grid.SetRow(navList, 0);
             g.Children.Add(navList);
 
@@ -373,13 +383,24 @@ namespace TimePlanner.App
               .Append(ShowDoneSection).Append('|').Append(st.Accent).Append('|').Append(st.WeekStartMonday).Append('|')
               .Append(st.WidgetVisible).Append('|').Append(st.WidgetShowDone).Append('|').Append(st.WidgetWidth).Append('|')
               .Append(st.WidgetHeight).Append('|').Append(st.WidgetScale).Append('|').Append(st.KeepDoneDays).Append('|')
-              .Append(st.AutoStart).Append('|').Append(st.PauseOnFullscreenEnabled).Append('|');
+              .Append(st.AutoStart).Append('|').Append(st.PauseOnFullscreenEnabled).Append('|')
+              .Append(Store.WriteError).Append('|');
             List<TaskItem> list = Store.Data.Tasks;
             for (int i = 0; i < list.Count; i++)
             {
                 TaskItem t = list[i];
                 sb.Append(t.Id).Append(':').Append(t.Done ? '1' : '0').Append(':').Append(t.Priority).Append(':')
-                  .Append(t.Sort).Append(':').Append(t.Date.Date.Ticks).Append(':').Append(t.Title).Append(':').Append(t.Tag).Append(':').Append(t.Note).Append(';');
+                  .Append(t.Sort).Append(':').Append(t.Date.Date.Ticks).Append(':').Append(t.Title).Append(':').Append(t.Tag).Append(':').Append(t.Note)
+                  .Append(':').Append(t.ProjectId).Append(';');
+            }
+            // 项目树也进签名：展开 / 收起、改名、挪次序、改了份数之后这一页都要重排
+            List<ProjectNode> projs = Store.Data.Projects;
+            for (int i = 0; i < projs.Count; i++)
+            {
+                ProjectNode n = projs[i];
+                sb.Append(n.Id).Append(':').Append(n.ParentId).Append(':').Append(n.Kind).Append(':').Append(n.Sort)
+                  .Append(':').Append(n.IsOpen ? '1' : '0').Append(':').Append(n.Title).Append(':').Append(n.ItemId)
+                  .Append(':').Append(n.Steps).Append(':').Append(n.Reached).Append(';');
             }
             return sb.ToString();
         }
@@ -404,46 +425,44 @@ namespace TimePlanner.App
             bool addFocused = AddBox != null && AddBox.Box.IsKeyboardFocusWithin;
             PaintNav();
             PaintSideFoot();
-            RememberScroll();
-
             UIElement body;
             if (Page == "week") { WeekAnchor = TaskQuery.WeekStart(WeekAnchor, Store.Settings.WeekStartMonday); body = BuildWeekPage(); }
+            else if (Page == "project") body = BuildProjectPage();
             else if (Page == "done") body = BuildDonePage();
             else if (Page == "settings") body = BuildSettingsPage();
+            else if (Page == "account") body = BuildAccountPage();
             else body = BuildTodayPage();
-            contentHost.Child = body;
+            UIElement view = KeepScroll(Page, body);        // 只换正文、留着滚动区：重画、打字回车都不会跳回顶部
+            if (!object.ReferenceEquals(contentHost.Child, view)) contentHost.Child = view;
             paintedPage = Page;
-            RestoreScroll(body);
 
             if (addFocused && AddBox != null) AddBox.FocusInput();
         }
 
         /// <summary>重建页面前记住滚动位置（拖动任务改期、勾选完成后页面不该跳回顶部）。</summary>
-        void RememberScroll()
+        // 页面正文都裹在 Ui.Scroll 里：重画的时候只把里面的内容换掉，滚动区本身留着接着用，位置由它自己带着。
+        // 以前是每趟都新建一个滚动区、靠「先读回位置、画完再设回去」：新滚动区要等布局量过内容才认
+        // VerticalOffset，量之前读回来是 0，赶上一趟刷新就把记下的位置覆盖成 0 —— 于是打完字一回车
+        //（Store 改动一次 + Submitted 里再刷一次）整页跳回顶部。留着滚动区就没这回事。
+        UIElement KeepScroll(string page, UIElement body)
         {
-            if (contentHost == null || paintedPage.Length == 0) return;
-            ScrollViewer sv = Ui.Find<ScrollViewer>(contentHost);
-            if (sv != null) scrollMemo[paintedPage] = sv.VerticalOffset;
-        }
-
-        /// <summary>把新页面的滚动条放回上次的位置；每页各记各的，切换页面时回到该页自己的位置。</summary>
-        void RestoreScroll(UIElement body)
-        {
-            if (body == null) return;
-            double want;
-            if (!scrollMemo.TryGetValue(Page, out want) || want <= 0.5) return;
-            ScrollViewer sv = Ui.Find<ScrollViewer>(body);
-            if (sv == null) return;
-            ScrollViewer target = sv;
-            target.UpdateLayout();
-            target.ScrollToVerticalOffset(want);
-            // 内容测量完成后才能滚到正确位置，所以在布局之后再补一次
-            Dispatcher.BeginInvoke(DispatcherPriority.Loaded, new Action(delegate()
+            ScrollViewer fresh = body as ScrollViewer;
+            if (fresh == null) { pageScrollers.Remove(page); return body; }
+            ScrollViewer keep;
+            if (!pageScrollers.TryGetValue(page, out keep) || keep == null)
             {
-                if (target.VerticalOffset != want) target.ScrollToVerticalOffset(want);
-            }));
+                pageScrollers[page] = fresh;
+                return fresh;
+            }
+            UIElement inner = fresh.Content as UIElement;
+            if (inner != null)
+            {
+                fresh.Content = null;           // 先撒手再交出去，免得撞上「已经是别人的子元素」
+                keep.Content = inner;
+            }
+            return keep;
         }
-
+        // [sync-classic] 主程序：每页留一个滚动区（重画只换正文）：65BFF7ADB895（整块由 sync-classic.ps1 从主线搬来，别在这一块里手改）
         void PaintNav()
         {
             foreach (object o in navList.Children)
@@ -469,6 +488,11 @@ namespace TimePlanner.App
                     var wl = TaskQuery.InRange(Store.Data.Tasks, ws, ws.AddDays(6));
                     for (int i = 0; i < wl.Count; i++) if (!wl[i].Done) openWeek++;
                     badge.Text = openWeek == 0 ? "" : openWeek.ToString();
+                }
+                else if (key == "project")
+                {
+                    int openProj = ProjectTree.OpenCount(Store.Data);
+                    badge.Text = openProj == 0 ? "" : openProj.ToString();
                 }
                 else badge.Text = "";
             }
@@ -521,6 +545,41 @@ namespace TimePlanner.App
             widget.HorizontalAlignment = HorizontalAlignment.Stretch;
             ((TextBlock)widget.Child).HorizontalAlignment = HorizontalAlignment.Center;
             sideFoot.Children.Add(widget);
+            // 手动存盘：改动平时是自动落盘的（Store.ScheduleSave），这里给个「现在就写」的按钮 ——
+            // 点一下立刻写文件，顺手把写去哪儿、写没写成摆在明面上，省得数据在不在本地全靠猜。
+            Border save = Ui.TextButton("保存计划", delegate()
+            {
+                Store.Flush();
+                saveNote = Store.WriteError == null && !Store.ReadOnly
+                    ? "已保存到本地 · " + Fmt.Clock(DateTime.Now)
+                    : null;                            // 写不下去的话，下面那块红字会说，不报假喜
+                PaintSideFoot();
+            }, false);
+            save.HorizontalAlignment = HorizontalAlignment.Stretch;
+            save.Margin = new Thickness(0, 8, 0, 0);
+            ((TextBlock)save.Child).HorizontalAlignment = HorizontalAlignment.Center;
+            Ui.Tip(save, "把当前计划立刻写进本地文件：\n" + Store.DataFile);
+            sideFoot.Children.Add(save);
+            if (saveNote != null)
+            {
+                TextBlock note = Ui.Txt(saveNote, 11, Theme.B(Theme.TextFaint), false);
+                note.HorizontalAlignment = HorizontalAlignment.Center;
+                note.Margin = new Thickness(0, 6, 0, 0);
+                sideFoot.Children.Add(note);
+            }
+
+            // 存盘失败必须让用户看见：否则改动只在内存里，一重启就没了。
+            string err = Store.WriteError;
+            if (err != null)
+            {
+                Border warn = Ui.Round(12, Theme.B(Theme.Panel), Theme.B(Theme.Danger), 1);
+                warn.Padding = new Thickness(13, 10, 13, 10);
+                warn.Margin = new Thickness(0, 8, 0, 0);
+                TextBlock wt = Ui.Txt("⚠ 存盘失败，改动还在内存里（正在重试）\n" + err, 11, Theme.B(Theme.Danger), false);
+                wt.TextWrapping = TextWrapping.Wrap;
+                warn.Child = wt;
+                sideFoot.Children.Add(warn);
+            }
         }
     }
 }

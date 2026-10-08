@@ -2,6 +2,9 @@
 
 Windows 桌面上的时间规划小工具：一个**主程序**用来规划今日与本周的计划，一个**桌面挂件**常驻桌面显示任务、勾选完成。
 
+> 这是**经典版**那条线（1.5 那套深色卡片，没有圣旨皮肤、没有小人），仓库里的分支就叫 `classic`。
+> 圣旨皮肤 + 小人的特别版是 `main`。两条线各发各的，共用 `%APPDATA%\TimePlanner\data.json`。
+
 原生 WPF（.NET Framework 4.8 / C# 5），**零第三方依赖**，界面全部由 C# 代码绘制（无 XAML、无资源字典），只用 Windows 自带的 `csc.exe` 就能编译。
 
 ![主程序 · 今日](outputs/screenshots/main-today.png)
