@@ -412,7 +412,7 @@ namespace TimePlanner.App
             w.ShowInTaskbar = false;
             w.Show();
 
-            string[] pages = new string[] { "today", "week", "project", "done", "settings" };
+            string[] pages = new string[] { "today", "week", "project", "done", "settings", "account" };
             for (int i = 0; i < pages.Length; i++)
             {
                 w.SelectPage(pages[i]);
@@ -429,7 +429,7 @@ namespace TimePlanner.App
             Preview.Capture(w, System.IO.Path.Combine(dir, "main-firework2.png"), Theme.B(Theme.Bg));
 
             // 每张图都盖一枚「示例数据」角标
-            string[] shots = new string[] { "main-today.png", "main-week.png", "main-project.png", "main-done.png", "main-settings.png", "main-firework.png", "main-firework2.png" };
+            string[] shots = new string[] { "main-today.png", "main-week.png", "main-project.png", "main-done.png", "main-settings.png", "main-account.png", "main-firework.png", "main-firework2.png" };
             for (int i = 0; i < shots.Length; i++) Preview.Sample(System.IO.Path.Combine(dir, shots[i]));
 
             w.Hide();

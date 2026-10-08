@@ -79,7 +79,7 @@ Note ($classic + "  @ " + $have.Substring(0, 8))
 
 # ---------- 2. 拷内核 ----------
 Step "同步内核文件"
-$coreFiles = @("Models.cs", "Store.cs", "Projects.cs", "Install.cs", "AppSignal.cs", "DesktopInterop.cs", "Diagnostics.cs")
+$coreFiles = @("Models.cs", "Store.cs", "Projects.cs", "Install.cs", "AppSignal.cs", "DesktopInterop.cs", "Diagnostics.cs", "NetCloud.cs", "NetSync.cs")
 foreach ($f in $coreFiles) {
     $src = Join-Path $root ("TimePlanner\src\Core\" + $f)
     if (-not (Test-Path $src)) { Fail ("主线里找不到 " + $f) }
@@ -96,6 +96,15 @@ foreach ($f in $uiFiles) {
     Copy-Item -LiteralPath $src -Destination (Join-Path $tp ("src\Core\" + $f)) -Force
 }
 Note ($uiFiles.Count.ToString() + " 个共用控件")
+
+# 新增的界面文件（经典版里原本没有这一页，整份拷，不做文字替换）
+$appFiles = @("AccountPage.cs")
+foreach ($f in $appFiles) {
+    $src = Join-Path $root ("TimePlanner\src\App\" + $f)
+    if (-not (Test-Path $src)) { Fail ("主线里找不到 " + $f) }
+    Copy-Item -LiteralPath $src -Destination (Join-Path $tp ("src\App\" + $f)) -Force
+}
+Note ($appFiles.Count.ToString() + " 个界面文件")
 
 $utf8bom = New-Object System.Text.UTF8Encoding($true)
 # 经典版源码树里的文件行尾不统一：有的整份 CRLF、有的整份 LF，还有的同一份里两种混着来
@@ -1094,8 +1103,10 @@ $pProjDemoNew = @'
 '@
 Region 'src\App\Program.cs' '        static void LoadDemoProjects(Store store)' '        static void AddDemo(Store store, string title, DateTime day, int prio, string tag, bool done)' $pProjDemoNew "示例数据：加上项目" 1
 
-$pPagesOld = '            string[] pages = new string[] { "today", "week", "done", "settings" };'
-$pPagesNew = '            string[] pages = new string[] { "today", "week", "project", "done", "settings" };'
+# 尾部故意不带上结尾的 ` };`：这一行后面还会被 3.5c 再接一页「云端共用」，
+# 带着尾巴当天就认不出「这行已经是最新的」（幂等要靠前缀对上）。
+$pPagesOld = '            string[] pages = new string[] { "today", "week", "done", "settings"'
+$pPagesNew = '            string[] pages = new string[] { "today", "week", "project", "done", "settings"'
 Swap 'src\App\Program.cs' $pPagesOld $pPagesNew "出图：多渲染一页项目档案"
 
 
@@ -1317,6 +1328,29 @@ $wPartDocOld = '        /// 按树上的次序排，下級缩进 —— 跟主�
 $wPartDocNew = '        /// 按树上的次序排，下級缩进 —— 跟主程序项目页一个读法。办满份数的跟任务一样，交给「已完成」那个开关管。'
 Swap 'src\Widget\WidgetWindow.cs' $wPartDocOld $wPartDocNew "插件：项目行注释按经典版的说法"
 
+
+
+# ---------- 3.5c 界面迁移：云端共用（账号 / 共用计划） ----------
+# 这一页整份拷过来（src\App\AccountPage.cs，见上面第 2 节），这儿只补三处接进主程序的地方：
+# 导航入口、切页派发、出图清单。
+
+$mNavCloudOld = '            navList.Children.Add(NavItem("settings", "gear", "设置"));'
+$mNavCloudNew = Blk @(
+'            navList.Children.Add(NavItem("settings", "gear", "设置"));'
+'            navList.Children.Add(NavItem("account", "refresh", "云端共用"));'
+'            AccountAuto.Start(this);          // 自动同步跟着主程序走，跟用户停在哪一页无关')
+Swap 'src\App\MainWindow.cs' $mNavCloudOld $mNavCloudNew "主程序：导航里加「云端共用」"
+
+$mDispatchCloudOld = '            else if (Page == "settings") body = BuildSettingsPage();'
+$mDispatchCloudNew = Blk @(
+'            else if (Page == "settings") body = BuildSettingsPage();'
+'            else if (Page == "account") body = BuildAccountPage();')
+Swap 'src\App\MainWindow.cs' $mDispatchCloudOld $mDispatchCloudNew "主程序：切到云端共用页"
+
+# 出图也带一张：这一页是新加的，截图清单得跟上（经典版没有「示例数据」角标那一步）
+$previewCloudOld = '            string[] pages = new string[] { "today", "week", "project", "done", "settings" };'
+$previewCloudNew = '            string[] pages = new string[] { "today", "week", "project", "done", "settings", "account" };'
+Swap 'src\App\Program.cs' $previewCloudOld $previewCloudNew "出图：把云端共用页也出一张"
 
 # ---------- 4. 版本号 ----------
 if ($Version -ne "") {

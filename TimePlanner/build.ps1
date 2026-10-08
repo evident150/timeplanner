@@ -28,6 +28,7 @@ function Find-Ref([string]$name) {
 }
 
 $refNames = @("System", "System.Core", "System.Xml", "System.Drawing", "System.Runtime.Serialization",
+              "System.Security",
               "PresentationCore", "PresentationFramework",
               "WindowsBase", "System.Xaml")
 $refArgs = @()

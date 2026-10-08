@@ -97,6 +97,7 @@ if (-not $SkipShots) {
         @((Join-Path $tmpMain   "main-project.png"),   "main-project.png"),
         @((Join-Path $tmpMain   "main-done.png"),      "main-done.png"),
         @((Join-Path $tmpMain   "main-settings.png"),  "main-settings.png"),
+        @((Join-Path $tmpMain   "main-account.png"),   "main-account.png"),
         @((Join-Path $tmpMain   "main-firework.png"),  "main-firework-1.png"),
         @((Join-Path $tmpMain   "main-firework2.png"), "main-firework-2.png"),
         @((Join-Path $tmpWidget "widget.png"),         "widget.png"),

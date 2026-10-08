@@ -294,6 +294,8 @@ namespace TimePlanner.App
             navList.Children.Add(NavItem("project", "layers", "项目档案"));
             navList.Children.Add(NavItem("done", "check", "已竟之事"));
             navList.Children.Add(NavItem("settings", "gear", "钦此设置"));
+            navList.Children.Add(NavItem("account", "refresh", "云端共用"));
+            AccountAuto.Start(this);          // 自动同步跟着主程序走，跟用户停在哪一页无关
             Grid.SetRow(navList, 0);
             g.Children.Add(navList);
 
@@ -587,6 +589,7 @@ namespace TimePlanner.App
             else if (Page == "project") body = BuildProjectPage();
             else if (Page == "done") body = BuildDonePage();
             else if (Page == "settings") body = BuildSettingsPage();
+            else if (Page == "account") body = BuildAccountPage();
             else body = BuildTodayPage();
             UIElement view = KeepScroll(Page, body);        // 只换正文、留着滚动区：重画、打字回车都不会跳回顶部
             if (!object.ReferenceEquals(contentHost.Child, view)) contentHost.Child = view;

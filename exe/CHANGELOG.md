@@ -45,12 +45,15 @@ TimePlanner/src/Core/Install.cs         版本隔离：互斥体 / 信号灯 / �
 TimePlanner/src/Core/AppSignal.cs       进程间信号灯（把缩在托盘里的窗口叫出来）
 TimePlanner/src/Core/DesktopInterop.cs  Win32：窗口层级、找窗口、开机自启
 TimePlanner/src/Core/Diagnostics.cs     日志
+TimePlanner/src/Core/NetCloud.cs        云端共用：配置 / 注册 / 登录 / 工作区（sp3 起）
+TimePlanner/src/Core/NetSync.cs         云端合并：本地 ↔ 云端对账（sp3 起）
 ```
 
-另有一份两条线共用的自绘控件（新文件，`sync-classic.ps1` 整份拷，不做文字替换）：
+另有几份直接整份拷过去、不做文字替换的文件（经典版里原来没有这一页 / 这个控件，`sync-classic.ps1` 第 2 节整份拷）：
 
 ```
 TimePlanner/src/Core/Steps.cs           大项目份数横条 + 份数步进器（sp1 起）
+TimePlanner/src/App/AccountPage.cs      云端共用页：账号 / 我的计划 / 成员（sp3 起）
 ```
 
 同步到经典版（仓库根目录跑）：
@@ -70,7 +73,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File sync-classic.ps1 -Version 1.
 
 ## 未发布
 
-（两条线的功能改动都已经发出去：特别版见 `sp2`，经典版见 `1.5.3`。）
+（两条线的功能改动都已经发出去：特别版见 `sp3`，经典版见 `1.5.4`。）
 
 ### 工具链 / 这台机器上的约定（不进版本段）
 ### 打包 / 运行目录（工具链改动，两条线都适用）
@@ -83,11 +86,50 @@ powershell -NoProfile -ExecutionPolicy Bypass -File sync-classic.ps1 -Version 1.
   `2026-09-15\wo-x\TimePlanner\dist\` 这种按日期开的会话目录里，换个工作区就找不着了。
   经典版那条照旧：`sync-classic.ps1 -InstallDir "C:\Users\24889\Documents\Codex\TimePlanner-1.5-classic"`。
 
+- **加了页面记得补出图清单**：`Program.cs --render` 的页面数组和 `release.ps1` 的截图对照表都补了
+  `main-account.png`（云端共用页）—— 页面是新的，截图这边不加就会一直少一张。
+
+- **同步脚本的一处幂等修正**：「项目档案」和「云端共用」两步改的是同一行 `pages` 数组，锚点原先带着
+  结尾的 ` };`，第二遍再跑就既不是老写法也不是新写法（报「经典版源码动过了？」）；现在锚点只对到
+  引号那一段，重复跑多少遍结果都一样。
+
 ---
 
 ## 已发布
 
 ### 特别版序列
+
+#### 特别版 sp3（2026-10-08）· 标签 `special/sp3`
+
+- `[内核]` **账号数据联网（云端共用）**：新增 `src/Core/NetCloud.cs`（配置 / 注册 / 登录 / 工作区 + 加解密、REST）
+  与 `src/Core/NetSync.cs`（本地 ↔ 云端对账合并），后端是 Supabase；建表脚本 `TimePlanner/tools/supabase-schema.sql`，
+  在控制台 SQL Editor 里整段跑一次就行。地址和 anonKey 读 `%APPDATA%\TimePlanner\cloud\net.json`；
+  也可以把 `net.json` 摆在 exe 旁边（连 exe 一起发给别人，对方一个文件都不用配）。
+  没配置 / 没网 / 断网时这一页安静退化成「本地照常用」，绝不拦着写计划。
+
+- `[需要移植]` **云端共用页**（新增 `src/App/AccountPage.cs`，左侧导航多一项「云端共用」）：
+  注册 / 登录（服务端关掉「邮箱确认」就直接进）、登录后自动挂回自己的「我的计划」、用邀请码加入别人的计划、
+  「重新读取配置」「测试连接」「立即同步」「只上传 / 只下载」、成员列表（谁在这条计划里、谁是发起人）、
+  20 秒自动对一次。**两个人一起做完一份计划**：两边都能加任务、勾进度，各改各的先留本机这份，下一次同步再推上去。
+
+- `[内核]` **认得出模板占位**：`net.json` 里还是 `xxxxxxxx.supabase.co` 那种占位内容时不再拿它去连
+  （以前会撞出一句「未能解析此远程名称: xxxxxxxx.supabase.co」）；页面直接说「还是模板占位，把真 url 和 anonKey 填进去」。
+  `net.json` 改完不用重启，按文件时间戳自动重读。
+
+- `[内核]` **空邮箱 / 空密码在本地就拦住**：空着点「注册新账号」以前会把空邮箱提交上去，
+  Supabase 当成「匿名登录」回一句 `Anonymous sign-ins are disabled`；现在本地就提示「先把邮箱和密码都填上」，
+  邮箱少了 `@` 也先提醒一句。
+
+- `[内核]` **新装不再自动塞示例任务**：首启那份示例数据删掉了（想试手感自己在今日页写两条），
+  数据文件里也不会凭空多出别人的任务。
+
+- `[需要移植]` **登录界面放大一档**：邮箱 / 密码 / 昵称三个输入框字号 13 → 15.5、行高加高、最小宽度 260，
+  「登录 / 注册新账号」两个按钮跟着放大（`BigBox` / `BigPwd` / `BigButton` 三个只给这一页用的小控件，公共控件没动）。
+
+- `[内核]` 云端出错一律写进 `timeplanner.log`（`[云端] …`），失败原因不用靠猜。
+
+- 数据结构没变（还是 v1），跟经典版共用 `%APPDATA%\TimePlanner\data.json`；不登录、不联网时就是原来那个本地规划器。
+
 
 #### 特别版 sp2（2026-09-25）· 标签 `special/sp2`
 
@@ -198,6 +240,17 @@ powershell -NoProfile -ExecutionPolicy Bypass -File sync-classic.ps1 -Version 1.
 - `[内核]` 无。
 
 ### 经典版序列
+
+#### 经典版 1.5.4（2026-10-08）· 标签 `classic/v1.5.4`
+
+- 跟特别版 `sp3` 同一批改动（同一份内核代码，`sync-classic.ps1` 搬过来）：
+  `[内核]` 云端共用（账号数据联网 + 两个人一起做完一份计划）、模板占位识别、空邮箱 / 空密码本地拦住、
+  新装不再自动塞示例任务；
+  `[需要移植]` 云端共用页（`src\App\AccountPage.cs` 整份拷）与登录界面放大一档 ——
+  这一版起左侧导航多了「云端共用」（深色卡片皮肤下同一个页面：注册 / 登录 / 我的计划 / 成员 / 同步）。
+
+- 经典版第一次有联网能力：不登录照样是原来那个纯本地规划器，登录之后才跟云端对账。
+
 
 #### 经典版 1.5.3（2026-09-25）· 标签 `classic/v1.5.3`
 

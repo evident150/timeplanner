@@ -224,7 +224,9 @@ namespace TimePlanner.Core
                     if (_data == null)
                     {
                         _data = AppData.CreateDefault();
-                        Seed(_data);
+                        // 首份数据就是空的：示例任务会被同步推到共用计划里，
+                        // 别人那边凭空多出几条「点圆圈勾选完成…」。截图要的那套示例数据是
+                        // 渲染时另灌的（Previewer.LoadDemo），跟用户的真实数据无关。
                     }
                     _data.Normalize();
                     _stamp = Stamp();
@@ -243,30 +245,6 @@ namespace TimePlanner.Core
                 if (d == null) throw new InvalidDataException("empty data");
                 return d;
             }
-        }
-
-        /// <summary>首次运行给一点上手示例。</summary>
-        static void Seed(AppData d)
-        {
-            DateTime today = DateTime.Today;
-            string[] tips = new string[]
-            {
-                "点圆圈勾选完成，桌面插件与主程序实时同步",
-                "双击标题栏打开主程序，规划整周安排",
-                "按住标题栏可以拖动这个桌面插件"
-            };
-            for (int i = 0; i < tips.Length; i++)
-            {
-                TaskItem t = TaskItem.Create(tips[i], today);
-                t.Sort = i;
-                t.Tag = i == 0 ? "上手" : "";
-                d.Tasks.Add(t);
-            }
-            DateTime monday = TaskQuery.WeekStart(today, true);
-            TaskItem w = TaskItem.Create("规划本周重点（在「本周」页添加）", monday.AddDays(1));
-            w.Sort = 0;
-            w.Tag = "示例";
-            d.Tasks.Add(w);
         }
 
         string Stamp()
@@ -844,7 +822,7 @@ namespace TimePlanner.Core
             return now;
         }
 
-        static void RemoveProjectSubtree(AppData d, string nodeId)
+        public static void RemoveProjectSubtree(AppData d, string nodeId)
         {
             List<ProjectNode> kids = ProjectTree.Children(d, nodeId);
             for (int i = 0; i < kids.Count; i++) RemoveProjectSubtree(d, kids[i].Id);
