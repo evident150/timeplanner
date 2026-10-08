@@ -4,7 +4,7 @@
   两条产品线（见根目录 CHANGELOG.md），各自一个版本序列：
     特别版 special = 主线 main，标签 special/v<版本>（special/v1.6、special/v1.7 …）
                     圣旨皮肤 + 小人，交付物叫 TimePlanner-<版本>-special
-    经典版 classic = 标签 classic/v1.5（＝以前的 v1.5），版本 1.5、1.5.1 …
+    经典版 classic = 仓库分支 classic（起点是旧的标签 v1.5），版本 1.5、1.5.1 …
                     深色卡片界面，交付物叫 TimePlanner-<版本>-classic
 
   两条线的版本号各走各的，互不覆盖；运行也完全隔离（各自的单实例 / 信号灯 / 自启条目）。
@@ -14,13 +14,15 @@
   经典版照着 CHANGELOG.md 同步一下就能跟上。
 
   这个脚本做的事：
-    1. 需要时把经典版源码树（classic/v1.5）检出到 work\classic
+    1. 需要时把经典版源码树（分支 classic）检出到 work\classic
     2. 把内核文件 + build.ps1 拷过去（这些文件在两条线里就是同一份）
     3. 把 CHANGELOG.md 里标 [内核] / [需要移植] 的改动都落到经典版源码里（幂等）；界面里整块
        搬的（项目页 / 示例数据）按内容指纹整段重铺，指纹注释跟着块走，别手改那几块
     4. 用 -Edition classic 编译出 work\classic\TimePlanner\dist
     5. 可选 -Release：铺 outputs\TimePlanner-<版本>-classic\ 并打 zip
     6. 可选 -InstallDir：把新 exe 覆盖到指定安装目录（旧的先备份成 *.bak-<时间戳>）
+    7. 发完版把这棵树提交到分支 classic，再把标签 classic/v<版本> 打到那个提交上
+       —— 标签指哪儿，GitHub 上那一版的 Source code 下下来就是哪条线的源码
 
   例：
     powershell -NoProfile -ExecutionPolicy Bypass -File sync-classic.ps1
@@ -31,7 +33,7 @@
   顺手把修法补进下面第 3.5 节，下次就能自动跟上了。
 #>
 param(
-    [string]$ClassicTag = "classic/v1.5",
+    [string]$ClassicTag = "classic",
     [string]$Version = "",
     [switch]$Release,
     [string]$InstallDir = "",
@@ -67,7 +69,7 @@ Step "经典版源码树"
 $want = (& git -C $root rev-parse ($ClassicTag + "^{commit}")).Trim()
 if (-not (Test-Path (Join-Path $tp "version.txt"))) {
     New-Item -ItemType Directory -Force -Path (Split-Path -Parent $classic) | Out-Null
-    & git -C $root worktree add --detach $classic $ClassicTag
+    & git -C $root worktree add $classic $ClassicTag
     if ($LASTEXITCODE -ne 0) { Fail ("检出 " + $ClassicTag + " 到 " + $classic + " 失败") }
 }
 $have = (& git -C $classic rev-parse HEAD).Trim()
@@ -1390,6 +1392,19 @@ if ($Release) {
     Pop-Location
     Note ("交付目录：" + $out)
     Note ("压缩包：" + $zip)
+
+    # 仓库里那份免编译包跟着刷新一份（分支 classic 上直接下就能跑）
+    $exeOut = Join-Path $classic "exe"
+    if (-not (Test-Path -LiteralPath $exeOut)) { New-Item -ItemType Directory -Force -Path $exeOut | Out-Null }
+    foreach ($f in @("TimePlanner.exe", "TimePlanner.Widget.exe")) {
+        Copy-Item -LiteralPath (Join-Path $dist $f) -Destination (Join-Path $exeOut $f) -Force
+    }
+    $clog = Join-Path $root "CHANGELOG.md"
+    if (Test-Path -LiteralPath $clog) {
+        Copy-Item -LiteralPath $clog -Destination (Join-Path $exeOut "CHANGELOG.md") -Force
+        Copy-Item -LiteralPath $clog -Destination (Join-Path $classic "CHANGELOG.md") -Force
+    }
+    Note "刷新 exe\（免编译包：两份 exe + CHANGELOG.md）"
 }
 
 # ---------- 7. 覆盖到安装目录 ----------
@@ -1408,6 +1423,12 @@ if ($InstallDir -ne "") {
     }
     Copy-Item -LiteralPath (Join-Path $root "CHANGELOG.md") -Destination (Join-Path $InstallDir "CHANGELOG.md") -Force
     Note ("旧的 exe 备份成了 *.bak-" + $stamp + "（想退回去就改名换回来）")
+}
+
+if ($Release -and $Version -ne "") {
+    Note "别忘了提交经典版源码树并打标签："
+    Note ("  git -C work/classic add -A; git -C work/classic commit -m ""时间规划 TimePlanner " + $Version + " 经典版""")
+    Note ("  git -C work/classic tag classic/v" + $Version)
 }
 
 Step "完成"

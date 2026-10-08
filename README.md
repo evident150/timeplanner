@@ -9,7 +9,7 @@ Windows 桌面上的时间规划小工具：一个**主程序**用来规划今�
 两条路，都不用编译：
 
 - **发行版（Releases）**：[`sp3 特别版`](https://github.com/evident150/timeplanner/releases/latest) 里直接下 `TimePlanner-sp3-special-app.zip`，解压双击就能用；经典版那条线最新是 [`1.5.4 经典版`](https://github.com/evident150/timeplanner/releases/tag/classic/v1.5.4)（带 `TimePlanner-1.5.4-classic.zip`），起点是 [`1.5 经典版`](https://github.com/evident150/timeplanner/releases/tag/v1.5)；历史上每一版都在[发行版列表](https://github.com/evident150/timeplanner/releases)里。特别版这条线的编号是 `sp1`、`sp2`、`sp3` …（`sp1` 就是原来的 1.8），交付物叫 `TimePlanner-sp<n>-special-app.zip`
-- **仓库里的 [`exe/`](exe/) 目录**：**当前版本**的免编译包（每次发版由 `release.ps1` 自动刷新），点进去单独下两个 exe 也行
+- **仓库里的 [`exe/`](exe/) 目录**：**当前版本**的免编译包（每次发版由 `release.ps1` 自动刷新），点进去单独下两个 exe 也行；经典版那份免编译包在分支 [`classic`](https://github.com/evident150/timeplanner/tree/classic) 的 `exe/` 里
 
 `exe/` 里是这些：
 
@@ -86,8 +86,10 @@ powershell -ExecutionPolicy Bypass -File release.ps1    # 一条命令出整套�
 ```
 
 版本号只有一个来源：特别版的 `TimePlanner/version.txt`。
-经典版是另一条线，源码树在 `work/classic`（`git worktree`，基于标签 `classic/v1.5`），
-一条命令就能把主线的内核和界面改动同步过去并编译（哪些算内核，见 [CHANGELOG.md](CHANGELOG.md)）：
+经典版是另一条线，源码树在 `work/classic`（`git worktree`，挂在分支 `classic` 上）——
+一条命令就能把主线的内核和界面改动同步过去并编译（哪些算内核，见 [CHANGELOG.md](CHANGELOG.md)）。
+发布出来的经典版源码就在仓库的分支 [`classic`](https://github.com/evident150/timeplanner/tree/classic) 里
+（`classic/v<版本>` 的标签都打在那一支的提交上，免编译包见那一支的 `exe/`）：
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File sync-classic.ps1                         # 同步 + 编译

@@ -12,13 +12,15 @@
   1. **先写 `CHANGELOG.md`**（仓库根，唯一的更新日志）：两条线各自的版本段落 + 每条标 `[内核]` /
      `[特别版]` / `[经典版]` / `[需要移植]`。三份 README/使用说明里有摘要，日志是源头。
   2. 经典版：`powershell -File sync-classic.ps1 -Version <经典版号> -Release`（没指定就 +0.0.1；铺
-     `outputs/TimePlanner-<版本>-classic/` + 打 zip；`[需要移植]` 的界面改动脚本自动搬）。
+     `outputs/TimePlanner-<版本>-classic/` + 打 zip；`[需要移植]` 的界面改动脚本自动搬）；
+     跑完把 `work/classic` 提交到分支 `classic`（`git -C work/classic add -A` 再 commit），标签别忘。
   3. 特别版（用户点名了才做）：改 `TimePlanner/version.txt`（`sp1`、`sp2`、`sp3` …），
      跑 `TimePlanner/release.ps1`：编译 + 出截图 + 铺 `outputs/TimePlanner-<版本>-special/`
      + 打 zip + 刷新仓库根目录的 `exe/` 免编译包（都会带上 `CHANGELOG.md`）
   4. `git add -A` + commit，提交信息开头写「时间规划 TimePlanner <版本> 经典版」；
      特别版也一起发了就写「时间规划 TimePlanner <特别版号> 特别版 + <经典版号> 经典版」
-  5. 打 tag：经典版 `classic/v<版本>`，特别版 `special/sp<n>`，推 `main` 和 tag
+  5. 打 tag：经典版 `classic/v<版本>`（**打在分支 `classic` 的那个提交上**），特别版 `special/sp<n>`；
+     推 `main`、分支 `classic` 和 tag
   6. 建 GitHub 发行版（详下）
 - 用户说过的原话：「以后小更新不推，我会告诉你什么时候推新版，然后一起全部更新。」
   「以后该电脑的改动优先在经典版生效，特殊版有我统一规定生效。」
@@ -49,7 +51,8 @@
   标签 `special/sp<n>`（1.6、1.7 那两个老标签还是 `special/v1.6`、`special/v1.7`），
   交付物 `TimePlanner-sp<n>-special`；
   **经典版** = 1.5 那套深色界面，序列 1.5 → 1.5.1 …，标签 `classic/v<版本>`
-  （`v1.5` 是它以前的名字，同一个提交），交付物 `TimePlanner-<版本>-classic`。
+  （`v1.5` 是它以前的名字，同一个提交；源码与免编译包在仓库的分支 `classic` 上），
+  交付物 `TimePlanner-<版本>-classic`。
   跟进方式见 `CHANGELOG.md` 与 `sync-classic.ps1`。
 - **运行隔离不能写死名字**：单实例互斥体、进程间信号灯、开机自启条目一律用
   `src/Core/Install.cs` 里的 `Install.AppMutex / WidgetMutex / SignalMain / SignalWidget /
@@ -64,9 +67,14 @@
   日期只用来开日志 / 产物 / 快照那些目录，**exe 别放日期目录里**（`2026-09-15\wo-x\TimePlanner\dist`
   只是编译产物，不是给人长期双击的地方）。
 - 数据只有一份（`%APPDATA%\TimePlanner\data.json`），两条线共用，**别做按版本分家的数据目录**。
-- 经典版源码树：`work/classic`（`git worktree`，detached 在 `classic/v1.5`）。同步脚本会往里拷
-  内核文件、迁移入口、再把 `[需要移植]` 的界面改动按文字替换搬过去（脚本第 3.5 节）；那棵树里的
-  改动**永远不提交**，重建就是 `git worktree remove --force work/classic`。
+- 经典版源码树：`work/classic`（`git worktree`，挂在**分支 `classic`** 上）。同步脚本会往里拷
+  内核文件、迁移入口、再把 `[需要移植]` 的界面改动按文字替换搬过去（脚本第 3.5 节）；
+  重建就是 `git worktree remove --force work/classic` 再跑一次同步脚本（默认从分支 `classic` 同步）。
+- **经典版源码必须在仓库里看得见（2026-10-08 用户发现的问题）**：这棵树不再是「永远不提交」的
+  草稿 —— 发版时 `git -C work/classic add -A` 之后提交，标签 `classic/v<版本>` 打在这个提交上。
+  以前标签挂在主线那个提交上，点 GitHub 的 `Source code` 下下来的是圣旨皮那份源码、`exe/` 里
+  也是特别版的 exe；标签指哪儿，下载下来就是哪儿。`work/classic/exe/` 是经典版的免编译包，
+  `sync-classic.ps1 -Release` 刷两份 exe + `CHANGELOG.md`（README / 使用说明是手写的，改版本记得跟着改）。
   新搬一处界面改动就加一段 `Swap`：锚点用目标文件里的原文，跑两遍结果要一样（幂等），
   文件行尾由 `Swap` 自己按目标文件对齐，别手拼 \r\n。
 

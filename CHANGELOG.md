@@ -98,6 +98,12 @@ powershell -NoProfile -ExecutionPolicy Bypass -File sync-classic.ps1 -Version 1.
   结尾的 ` };`，第二遍再跑就既不是老写法也不是新写法（报「经典版源码动过了？」）；现在锚点只对到
   引号那一段，重复跑多少遍结果都一样。
 
+- **经典版这条线也进仓库了（分支 `classic`，2026-10-08）**：以前经典版源码只在本地 `work/classic`、
+  从不提交，于是标签 `classic/v1.5.4` 挂在主线那个提交上 —— 点 GitHub 的 `Source code` 下下来的是
+  圣旨皮那份源码，`exe/` 里也是特别版的 exe。现在经典版源码树落在常驻分支 `classic` 上
+  （`classic/v1.5.4` 指到这里，提交里带着经典版自己的免编译包 `exe/`）；`sync-classic.ps1` 默认从
+  这条分支同步（`-ClassicTag` 默认 `classic`），`-Release` 顺手刷新 `exe/`。
+
 ---
 
 ## 已发布
