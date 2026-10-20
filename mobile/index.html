@@ -1,0 +1,513 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#101218">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>时间规划 · 手机</title>
+<style>
+:root{
+  --bg:#0f1117; --card:#191c26; --card2:#222634; --line:#2c3243;
+  --txt:#e9ecf4; --dim:#98a0b3; --faint:#6b7285; --accent:#e2556d;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;min-height:100%}
+body{
+  background:var(--bg);color:var(--txt);
+  font:15px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+  padding-bottom:calc(env(safe-area-inset-bottom) + 24px);
+}
+.wrap{max-width:640px;margin:0 auto;padding:0 14px}
+h1{font-size:19px;margin:0;letter-spacing:.5px}
+.muted{color:var(--dim);font-size:13px}
+.faint{color:var(--faint);font-size:12px}
+.top{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:14px 0 12px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;margin:0 0 12px}
+label{display:block;font-size:12.5px;color:var(--dim);margin:12px 0 5px}
+input{width:100%;background:var(--card2);color:var(--txt);border:1px solid var(--line);border-radius:10px;padding:11px 12px;font:inherit;outline:none}
+input:focus{border-color:var(--accent)}
+button{font:inherit;color:var(--txt);background:var(--card2);border:1px solid var(--line);border-radius:10px;padding:9px 13px;cursor:pointer}
+button:active{opacity:.65}
+button.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+button.ghost{background:transparent}
+button[disabled]{opacity:.5}
+.row{display:flex;align-items:center;gap:9px}
+.err{color:#ff8a9b;font-size:13px;margin-top:10px;white-space:pre-wrap}
+.ok{color:#7dd6a5;font-size:12.5px}
+.group{margin:18px 0 7px;font-size:12.5px;color:var(--dim);display:flex;justify-content:space-between}
+.group b{color:var(--faint);font-weight:400}
+.group .fold{font-style:normal;color:var(--faint);margin-left:2px}
+.task{display:flex;align-items:flex-start;gap:11px;background:var(--card);border:1px solid var(--line);
+  border-radius:12px;padding:12px 13px;margin-bottom:8px}
+.task:active{background:var(--card2)}
+.box{flex:0 0 20px;width:20px;height:20px;border-radius:50%;border:1.6px solid #4a5268;margin-top:1px;
+  display:flex;align-items:center;justify-content:center;font-size:13px;color:#fff}
+.task.on .box{background:var(--accent);border-color:var(--accent)}
+.task.on .ttl{color:var(--faint);text-decoration:line-through}
+.tb{flex:1;min-width:0}
+.ttl{word-break:break-word;font-size:15px}
+.meta{color:var(--faint);font-size:12px;margin-top:3px}
+.add{display:flex;gap:8px;margin:4px 0 2px}
+.add input{flex:1}
+.pill{font-size:12px;color:var(--dim);border:1px solid var(--line);border-radius:999px;padding:4px 10px;background:transparent}
+.pill.on{color:var(--accent);border-color:var(--accent);background:rgba(226,85,109,.13)}
+.foot{text-align:center;color:var(--faint);font-size:11.5px;margin:22px 0 0}
+</style>
+</head>
+<body>
+<div id="view"></div>
+<script src="config.js" onerror="void 0"></script>
+<script>
+(function(){
+  'use strict';
+
+  var K = { cfg:'tp.cfg', sess:'tp.sess', ws:'tp.ws' };
+  var S = { cfg:null, tok:'', rt:'', exp:0, uid:'', email:'', ws:null, tasks:[], busy:false,
+            err:'', note:'', addDate:'', loaded:false, timer:0 };
+
+  function $(s, r){ return (r||document).querySelector(s); }
+  function load(k){ try { return JSON.parse(localStorage.getItem(k)||'null'); } catch(e){ return null; } }
+  function save(k,v){ try { localStorage.setItem(k, JSON.stringify(v)); } catch(e){} }
+  function del(k){ try { localStorage.removeItem(k); } catch(e){} }
+  function esc(s){
+    return String(s==null?'':s).replace(/[&<>"']/g, function(c){
+      return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
+    });
+  }
+  function pad(n){ return n<10 ? '0'+n : ''+n; }
+  function ymd(d){ d = d instanceof Date ? d : new Date(d);
+    return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate()); }
+  function shift(n){ var d = new Date(); d.setDate(d.getDate()+n); return ymd(d); }
+  function weekday(d){ return '周' + '日一二三四五六'.charAt(new Date(d+'T00:00:00').getDay()); }
+  function label(d, today){
+    if (d === today) return '今天';
+    if (d === shift(1)) return '明天';
+    if (d === shift(-1)) return '昨天';
+    var p = d.split('-');
+    return parseInt(p[1],10) + '月' + parseInt(p[2],10) + '日 ' + weekday(d);
+  }
+  function newId(){
+    if (window.crypto && crypto.randomUUID) return crypto.randomUUID().replace(/-/g,'');
+    var h='0123456789abcdef', s='';
+    for (var i=0;i<32;i++) s += h.charAt(Math.floor(Math.random()*16));
+    return s;
+  }
+
+  // ---------- 配置 ----------
+  (function(){
+    var c = load(K.cfg);
+    if (c && c.url && c.key) { S.cfg = c; return; }
+    if (window.TP_CONFIG && window.TP_CONFIG.url && window.TP_CONFIG.key) S.cfg = window.TP_CONFIG;
+  })();
+
+  function base(){ return String(S.cfg.url).replace(/\/+$/,''); }
+
+  function msg(b){
+    if (!b) return '';
+    if (typeof b === 'string') return b;
+    return b.error_description || b.msg || b.message || b.hint || b.error || '';
+  }
+
+  function ensureTok(){
+    if (!S.tok) return Promise.resolve('');
+    if (Date.now() < S.exp - 120000) return Promise.resolve(S.tok);
+    if (!S.rt) { logout(); return Promise.resolve(''); }
+    return fetch(base()+'/auth/v1/token?grant_type=refresh_token', {
+      method:'POST',
+      headers:{ apikey:S.cfg.key, 'Content-Type':'application/json' },
+      body: JSON.stringify({ refresh_token:S.rt })
+    }).then(function(r){
+      return r.text().then(function(t){
+        var j = null; try { j = t ? JSON.parse(t) : null; } catch(e){ j = null; }
+        if (!r.ok) { logout(); throw new Error(msg(j) || '登录已过期'); }
+        applySession(j);
+        return S.tok;
+      });
+    });
+  }
+
+  function req(path, opt){
+    opt = opt || {};
+    var prep = opt.noAuth ? Promise.resolve('') : ensureTok();
+    return prep.then(function(){
+      var h = { apikey:S.cfg.key };
+      if (opt.body != null) h['Content-Type'] = 'application/json';
+      if (!opt.noAuth && S.tok) h.Authorization = 'Bearer ' + S.tok;
+      if (opt.headers) for (var k in opt.headers) if (opt.headers.hasOwnProperty(k)) h[k] = opt.headers[k];
+      var o = { method: opt.method || 'GET', headers:h };
+      if (opt.body != null) o.body = JSON.stringify(opt.body);
+      return fetch(base()+path, o).then(function(r){
+        return r.text().then(function(t){
+          var b = null;
+          if (t) { try { b = JSON.parse(t); } catch(e){ b = t; } }
+          if (!r.ok) {
+            var e = new Error(msg(b) || ('HTTP '+r.status));
+            e.status = r.status; e.body = b;
+            throw e;
+          }
+          return b;
+        });
+      });
+    });
+  }
+
+  function rpc(fn, body){ return req('/rest/v1/rpc/'+fn, { method:'POST', body: body||{} }); }
+
+  // ---------- 会话 ----------
+  function applySession(j){
+    S.tok = j.access_token || S.tok;
+    S.rt = j.refresh_token || S.rt;
+    S.exp = Date.now() + ((j.expires_in || 3600) * 1000);
+    if (j.user) { S.uid = j.user.id || S.uid; S.email = j.user.email || S.email; }
+    save(K.sess, { tok:S.tok, rt:S.rt, exp:S.exp, uid:S.uid, email:S.email });
+  }
+
+  function restore(){
+    var s = load(K.sess);
+    if (s) { S.tok=s.tok||''; S.rt=s.rt||''; S.exp=s.exp||0; S.uid=s.uid||''; S.email=s.email||''; }
+    S.ws = load(K.ws) || null;
+    S.addDate = shift(0);
+  }
+
+  function logout(){
+    S.tok=''; S.rt=''; S.exp=0; S.uid=''; S.email=''; S.ws=null; S.tasks=[];
+    S.err=''; S.note=''; S.loaded=false;
+    del(K.sess); del(K.ws);
+    stopTimer();
+    render();
+  }
+
+  // ---------- 数据 ----------
+  function loadWs(){
+    return rpc('tp_my_workspaces').then(function(list){
+      list = list || [];
+      if (!list.length) { S.ws = null; return null; }
+      var w = null;
+      if (S.ws) for (var i=0;i<list.length;i++) if (list[i].id === S.ws.id) w = list[i];
+      if (!w) w = list[0];
+      S.ws = w; save(K.ws, w);
+      return w;
+    });
+  }
+
+  function loadTasks(){
+    if (!S.ws) return Promise.resolve();
+    var q = '/rest/v1/tasks?workspace_id=eq.'+S.ws.id
+          + '&deleted_at=is.null'
+          + '&select=id,title,note,date,done,done_at,priority,tag,sort,project_id,rev,completed_by'
+          + '&order=date.asc,sort.asc&limit=2000';
+    return req(q).then(function(rows){ S.tasks = rows || []; S.loaded = true; });
+  }
+
+  function sync(quiet){
+    if (!S.ws) { return Promise.resolve(); }
+    return loadTasks().then(function(){
+      S.err = '';
+      if (!quiet) { S.note = '已同步 ' + new Date().toLocaleTimeString('zh-CN',{hour12:false}); render(); }
+    }).catch(function(e){
+      if (e.status === 401) { logout(); return; }
+      S.err = e.message;
+      render();
+    });
+  }
+
+  function toggle(t){
+    if (S.busy) return;
+    S.busy = true;
+    var done = !t.done;
+    var body = {
+      done: done,
+      done_at: done ? new Date().toISOString() : null,
+      completed_by: done ? (S.uid || null) : null,
+      rev: (t.rev || 1) + 1
+    };
+    req('/rest/v1/tasks?id=eq.'+encodeURIComponent(t.id), {
+      method:'PATCH', body:body, headers:{ Prefer:'return=representation' }
+    }).then(function(rows){
+      if (rows && rows[0]) { for (var k in rows[0]) if (rows[0].hasOwnProperty(k)) t[k] = rows[0][k]; }
+      else { t.done = done; t.rev = body.rev; t.completed_by = body.completed_by; }
+      S.err = '';
+    }).catch(function(e){
+      if (e.status === 401) { logout(); return; }
+      S.err = e.message;
+    }).then(function(){ S.busy = false; render(); });
+  }
+
+  function addTask(title, date){
+    var t = { id:newId(), workspace_id:S.ws.id, title:title, note:'', date:date, done:false,
+              priority:0, tag:'', sort:nextSort(date), project_id:'', rev:1 };
+    return req('/rest/v1/tasks', {
+      method:'POST', body:t, headers:{ Prefer:'return=representation' }
+    }).then(function(rows){
+      if (rows && rows[0]) S.tasks.push(rows[0]);
+      S.err = '';
+    }).catch(function(e){
+      if (e.status === 401) { logout(); return; }
+      S.err = e.message;
+    });
+  }
+
+  function nextSort(date){
+    var m = 0;
+    for (var i=0;i<S.tasks.length;i++)
+      if (S.tasks[i].date === date && (S.tasks[i].sort||0) > m) m = S.tasks[i].sort||0;
+    return m + 1;
+  }
+
+  function startTimer(){
+    stopTimer();
+    S.timer = setInterval(function(){ if (!document.hidden && S.tok && S.ws) sync(true); }, 15000);
+  }
+  function stopTimer(){ if (S.timer) { clearInterval(S.timer); S.timer = 0; } }
+
+  // ---------- 界面 ----------
+  var view = null;
+
+  function render(){
+    view = $('#view');
+    if (!view) return;
+    if (!S.cfg) return renderSetup();
+    if (!S.tok) return renderLogin();
+    if (!S.ws) return renderNoWs();
+    renderList();
+  }
+
+  function renderSetup(){
+    view.innerHTML = ''
+      + '<div class="wrap"><div class="top"><h1>时间规划 · 手机</h1></div>'
+      + '<div class="card">'
+      + '<div class="muted">第一次用，填一下 Supabase 的地址和 anon key。只存在这台手机的浏览器里。</div>'
+      + '<label>项目地址</label><input id="f-url" placeholder="https://xxxx.supabase.co" autocapitalize="off" autocorrect="off" value="'+esc(S.cfg?S.cfg.url:'')+'">'
+      + '<label>anon public key</label><input id="f-key" placeholder="eyJhbGciOi..." autocapitalize="off" autocorrect="off" value="">'
+      + '<div class="row" style="margin-top:14px"><button class="primary" id="f-save" style="flex:1">保存并进入</button></div>'
+      + '<div class="err" id="f-err"></div>'
+      + '</div></div>';
+    $('#f-save').onclick = function(){
+      var u = $('#f-url').value.trim().replace(/\/+$/,'');
+      var k = $('#f-key').value.trim();
+      if (!/^https?:\/\//.test(u)) return showErr('#f-err','地址要以 https:// 开头');
+      if (k.length < 20) return showErr('#f-err','key 看着不像 anon key');
+      S.cfg = { url:u, key:k };
+      save(K.cfg, S.cfg);
+      render();
+    };
+  }
+
+  function renderLogin(){
+    view.innerHTML = ''
+      + '<div class="wrap"><div class="top"><h1>登录</h1>'
+      + '<button class="ghost" id="cfg">配置</button></div>'
+      + '<div class="card">'
+      + '<label>邮箱</label><input id="l-email" type="email" autocomplete="username" autocapitalize="off" value="'+esc(S.email)+'">'
+      + '<label>密码</label><input id="l-pwd" type="password" autocomplete="current-password">'
+      + '<div class="row" style="margin-top:14px;gap:9px">'
+      + '<button class="primary" id="l-go" style="flex:1">登录</button>'
+      + '<button id="l-reg" style="flex:1">注册</button></div>'
+      + '<div class="err" id="l-err"></div>'
+      + '</div>'
+      + '<div class="faint" style="text-align:center">跟电脑上那个是同一个账号；注册后记得回电脑上把邀请码发给对方。</div>'
+      + '</div>';
+    $('#cfg').onclick = function(){ S.cfg = null; del(K.cfg); render(); };
+    $('#l-go').onclick = function(){ auth('password'); };
+    $('#l-reg').onclick = function(){ auth('signup'); };
+    $('#l-pwd').onkeydown = function(e){ if (e.key === 'Enter') auth('password'); };
+  }
+
+  function auth(kind){
+    var email = $('#l-email').value.trim();
+    var pwd = $('#l-pwd').value;
+    if (!email || email.indexOf('@') < 0) return showErr('#l-err','邮箱填完整');
+    if (!pwd) return showErr('#l-err','密码别空着');
+    var btn = kind === 'signup' ? $('#l-reg') : $('#l-go');
+    btn.disabled = true;
+    var p = kind === 'signup'
+      ? req('/auth/v1/signup', { method:'POST', body:{ email:email, password:pwd }, noAuth:true })
+      : req('/auth/v1/token?grant_type=password', { method:'POST', body:{ email:email, password:pwd }, noAuth:true });
+    p.then(function(j){
+      if (j && j.access_token) {
+        applySession(j);
+        return loadWs().then(function(){ render(); bootTasks(); });
+      }
+      showErr('#l-err','注册好了。先去邮箱点确认，再回来登录。');
+    }).catch(function(e){
+      btn.disabled = false;
+      showErr('#l-err', e.message);
+    });
+  }
+
+  function renderNoWs(){
+    view.innerHTML = ''
+      + '<div class="wrap"><div class="top"><h1>加入一份计划</h1>'
+      + '<button class="ghost" id="quit">退出</button></div>'
+      + '<div class="card">'
+      + '<div class="muted">电脑上「云端共用」页里有一条邀请码，填进来就能一起改同一份计划。</div>'
+      + '<label>邀请码</label><input id="w-code" autocapitalize="off" autocorrect="off" placeholder="例如 3f9a2c1b7e4d">'
+      + '<div class="row" style="margin-top:14px"><button class="primary" id="w-join" style="flex:1">加入</button></div>'
+      + '<div class="err" id="w-err"></div>'
+      + '</div>'
+      + '<div class="card">'
+      + '<div class="muted">或者自己新建一份：</div>'
+      + '<label>名字</label><input id="w-name" value="我的计划">'
+      + '<div class="row" style="margin-top:14px"><button id="w-new" style="flex:1">新建</button></div>'
+      + '</div></div>';
+    $('#quit').onclick = logout;
+    $('#w-join').onclick = function(){
+      var c = $('#w-code').value.trim();
+      if (!c) return showErr('#w-err','先填邀请码');
+      rpc('tp_join_workspace', { code:c }).then(function(w){
+        S.ws = w; save(K.ws, w); render(); bootTasks();
+      }).catch(function(e){ showErr('#w-err', e.message); });
+    };
+    $('#w-new').onclick = function(){
+      var n = $('#w-name').value.trim() || '我的计划';
+      rpc('tp_create_workspace', { nm:n }).then(function(w){
+        S.ws = w; save(K.ws, w); render(); bootTasks();
+      }).catch(function(e){ showErr('#w-err', e.message); });
+    };
+  }
+
+  function renderList(){
+    if (!S.loaded && !S.err) {
+      view.innerHTML = '<div class="wrap"><div class="top"><h1>' + esc(S.ws.name || '我的计划')
+        + '</h1></div><div class="card" style="text-align:center;color:var(--faint)">正在同步…</div></div>';
+      return;
+    }
+    var today = ymd(new Date());
+    var over = [], todayList = [], later = {}, done = [];
+    for (var i=0;i<S.tasks.length;i++){
+      var t = S.tasks[i];
+      if (t.done) { done.push(t); continue; }
+      if (t.date < today) over.push(t);
+      else if (t.date === today) todayList.push(t);
+      else (later[t.date] = later[t.date] || []).push(t);
+    }
+    done.sort(function(a,b){ return (b.done_at||'') > (a.done_at||'') ? 1 : -1; });
+
+    var h = '';
+    h += '<div class="wrap">';
+    h += '<div class="top"><div style="min-width:0">'
+      + '<h1>' + esc(S.ws.name || '我的计划') + '</h1>'
+      + '<div class="faint" id="invite">邀请码 ' + esc(S.ws.invite || '') + ' · 点一下复制</div>'
+      + '</div><div class="row">'
+      + '<button id="refresh" title="刷新">↻</button>'
+      + '<button class="ghost" id="logout">退出</button>'
+      + '</div></div>';
+
+    h += '<div class="card" style="padding:11px">'
+      + '<div class="add">'
+      + '<input id="add-title" placeholder="加一条，回车保存" autocomplete="off">'
+      + '<button class="primary" id="add-go">加</button>'
+      + '</div><div class="row" style="margin-top:9px">'
+      + '<button class="pill'+(S.addDate===shift(0)?' on':'')+'" data-day="0">今天</button>'
+      + '<button class="pill'+(S.addDate===shift(1)?' on':'')+'" data-day="1">明天</button>'
+      + '<span class="faint" id="add-hint" style="margin-left:auto">' + esc(label(S.addDate, today)) + '</span>'
+      + '</div></div>';
+
+    if (over.length) h += groupHtml('已逾期', over.length) + over.map(rowHtml).join('');
+    if (todayList.length) h += groupHtml('今天', todayList.length) + todayList.map(rowHtml).join('');
+    var keys = Object.keys(later).sort();
+    for (var j=0;j<keys.length;j++){
+      h += groupHtml(label(keys[j], today), later[keys[j]].length) + later[keys[j]].map(rowHtml).join('');
+    }
+    if (!over.length && !todayList.length && !keys.length)
+      h += '<div class="card" style="text-align:center;color:var(--faint)">今天没有待办。要么加一条，要么休息。</div>';
+
+    if (done.length){
+      h += groupHtml('已完成', done.length, '▸');
+      h += '<div id="done-list" style="display:none">' + done.slice(0,60).map(rowHtml).join('') + '</div>';
+    }
+
+    h += '<div class="foot">' + (S.err ? '<span class="err">'+esc(S.err)+'</span>' : esc(S.note || '每 15 秒自动同步')) + '</div>';
+    h += '</div>';
+
+    view.innerHTML = h;
+
+    $('#refresh').onclick = function(){ sync(false); };
+    $('#logout').onclick = logout;
+    $('#invite').onclick = function(){
+      var code = S.ws.invite || '';
+      if (navigator.clipboard && code) navigator.clipboard.writeText(code);
+      S.note = '邀请码已复制：' + code; render();
+    };
+    $('#add-go').onclick = submitAdd;
+    $('#add-title').onkeydown = function(e){ if (e.key === 'Enter') submitAdd(); };
+    var pills = view.querySelectorAll('.pill');
+    for (var p=0;p<pills.length;p++) pills[p].onclick = function(){
+      S.addDate = shift(parseInt(this.getAttribute('data-day'),10)); render();
+    };
+    var g = $('#done-list');
+    if (g) {
+      var head = g.previousElementSibling;
+      head.style.cursor = 'pointer';
+      head.onclick = function(){
+        var open = g.style.display === 'none';
+        g.style.display = open ? '' : 'none';
+        var f = head.querySelector('.fold');
+        if (f) f.textContent = open ? '▾' : '▸';
+      };
+    }
+    bindRows();
+  }
+
+  function submitAdd(){
+    var box = $('#add-title');
+    var t = box.value.trim();
+    if (!t) return;
+    box.value = '';
+    addTask(t, S.addDate).then(function(){ render(); });
+  }
+
+  function groupHtml(name, n, fold){
+    return '<div class="group"><span>'+esc(name)+(fold?' <i class="fold">'+fold+'</i>':'')+'</span><b>'+n+'</b></div>';
+  }
+
+  function rowHtml(t){
+    var meta = [];
+    if (t.tag) meta.push(t.tag);
+    if (t.done) meta.push(t.completed_by ? (t.completed_by === S.uid ? '我完成的' : '对方完成的') : '已完成');
+    return '<div class="task' + (t.done?' on':'') + '" data-id="' + esc(t.id) + '">'
+      + '<span class="box">' + (t.done ? '✓' : '') + '</span>'
+      + '<div class="tb"><div class="ttl">' + esc(t.title) + '</div>'
+      + (meta.length ? '<div class="meta">' + esc(meta.join(' · ')) + '</div>' : '')
+      + '</div></div>';
+  }
+
+  function bindRows(){
+    var rows = view.querySelectorAll('.task');
+    for (var i=0;i<rows.length;i++){
+      rows[i].onclick = function(){
+        var id = this.getAttribute('data-id');
+        for (var k=0;k<S.tasks.length;k++) if (S.tasks[k].id === id) { toggle(S.tasks[k]); return; }
+      };
+    }
+  }
+
+  function showErr(sel, text){
+    var e = $(sel);
+    if (e) e.textContent = text;
+  }
+
+  function bootTasks(){
+    if (!S.ws) return;
+    loadTasks().then(function(){ S.err=''; render(); startTimer(); })
+      .catch(function(e){
+        if (e.status === 401) { logout(); return; }
+        S.err = e.message; render();
+      });
+  }
+
+  // ---------- 启动 ----------
+  restore();
+  if (S.cfg && S.tok) {
+    render();
+    loadWs().then(function(){ if (S.ws) bootTasks(); else render(); })
+      .catch(function(e){ if (e.status === 401) logout(); else { S.err = e.message; render(); } });
+  } else {
+    render();
+  }
+})();
+</script>
+</body>
+</html>
