@@ -9,51 +9,99 @@
 <title>时间规划 · 手机</title>
 <style>
 :root{
-  --bg:#0f1117; --card:#191c26; --card2:#222634; --line:#2c3243;
-  --txt:#e9ecf4; --dim:#98a0b3; --faint:#6b7285; --accent:#e2556d;
+  --bg:#0b0d13; --bg2:#12151e; --card:#171b25; --card2:#202633; --line:#2a3141;
+  --txt:#eef1f8; --dim:#9aa3b8; --faint:#6b7488;
+  --accent:#e2556d; --accent2:#ff8095; --ok:#63d29a;
 }
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{margin:0;min-height:100%}
 body{
-  background:var(--bg);color:var(--txt);
-  font:15px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
-  padding-bottom:calc(env(safe-area-inset-bottom) + 24px);
+  background:var(--bg);
+  background-image:radial-gradient(900px 420px at 50% -160px,#202634 0%,rgba(11,13,19,0) 70%);
+  color:var(--txt);
+  font:15px/1.55 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+  padding-bottom:calc(env(safe-area-inset-bottom) + 28px);
+  overscroll-behavior-y:contain;
 }
 .wrap{max-width:640px;margin:0 auto;padding:0 14px}
-h1{font-size:19px;margin:0;letter-spacing:.5px}
+h1{font-size:18px;margin:0;letter-spacing:.3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .muted{color:var(--dim);font-size:13px}
 .faint{color:var(--faint);font-size:12px}
-.top{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:14px 0 12px}
-.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;margin:0 0 12px}
-label{display:block;font-size:12.5px;color:var(--dim);margin:12px 0 5px}
-input{width:100%;background:var(--card2);color:var(--txt);border:1px solid var(--line);border-radius:10px;padding:11px 12px;font:inherit;outline:none}
-input:focus{border-color:var(--accent)}
-button{font:inherit;color:var(--txt);background:var(--card2);border:1px solid var(--line);border-radius:10px;padding:9px 13px;cursor:pointer}
-button:active{opacity:.65}
-button.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+button,input{font:inherit}
+button{touch-action:manipulation;color:var(--txt);background:var(--card2);border:1px solid var(--line);
+  border-radius:10px;padding:9px 13px;cursor:pointer;transition:opacity .12s,transform .12s}
+button:active{opacity:.65;transform:scale(.97)}
+button.primary{background:linear-gradient(180deg,var(--accent2),var(--accent));border-color:var(--accent);color:#fff;font-weight:600}
 button.ghost{background:transparent}
 button[disabled]{opacity:.5}
+input{width:100%;background:var(--card2);color:var(--txt);border:1px solid var(--line);
+  border-radius:10px;padding:11px 12px;outline:none;transition:border-color .15s}
+input:focus{border-color:var(--accent)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;margin:0 0 12px}
+label{display:block;font-size:12.5px;color:var(--dim);margin:12px 0 5px}
 .row{display:flex;align-items:center;gap:9px}
 .err{color:#ff8a9b;font-size:13px;margin-top:10px;white-space:pre-wrap}
-.ok{color:#7dd6a5;font-size:12.5px}
-.group{margin:18px 0 7px;font-size:12.5px;color:var(--dim);display:flex;justify-content:space-between}
-.group b{color:var(--faint);font-weight:400}
-.group .fold{font-style:normal;color:var(--faint);margin-left:2px}
-.task{display:flex;align-items:flex-start;gap:11px;background:var(--card);border:1px solid var(--line);
-  border-radius:12px;padding:12px 13px;margin-bottom:8px}
-.task:active{background:var(--card2)}
-.box{flex:0 0 20px;width:20px;height:20px;border-radius:50%;border:1.6px solid #4a5268;margin-top:1px;
-  display:flex;align-items:center;justify-content:center;font-size:13px;color:#fff}
-.task.on .box{background:var(--accent);border-color:var(--accent)}
+.ok{color:var(--ok);font-size:12.5px}
+
+/* 顶栏 / 日期切换 */
+.sticky{position:sticky;top:0;z-index:20;background:rgba(11,13,19,.9);
+  -webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);border-bottom:1px solid rgba(42,49,65,.55)}
+.top{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 0 9px}
+.top .act{display:flex;gap:7px;flex:0 0 auto}
+.top .act button{padding:7px 10px;font-size:13px;background:rgba(32,38,51,.7)}
+.seg{display:grid;grid-template-columns:repeat(3,1fr);gap:5px;background:rgba(23,27,37,.9);
+  border:1px solid var(--line);border-radius:12px;padding:4px;margin:0 0 10px}
+.seg button{background:transparent;border:0;border-radius:9px;padding:8px 2px;color:var(--dim);
+  font-size:13.5px;display:flex;align-items:center;justify-content:center;gap:5px}
+.seg button.on{background:var(--card2);color:var(--txt);box-shadow:inset 0 1px 0 rgba(255,255,255,.05)}
+.seg b{font-size:11px;font-weight:600;color:var(--faint);background:rgba(255,255,255,.06);
+  border-radius:999px;padding:1px 6px;min-width:20px}
+.seg button.on b{color:var(--accent);background:rgba(226,85,109,.15)}
+
+/* 进度 */
+.stat{background:var(--card);border:1px solid var(--line);border-radius:13px;padding:11px 13px;margin:0 0 12px}
+.stat .line{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:8px}
+.stat .line span{font-size:13px;color:var(--dim)}
+.stat .line b{font-size:17px;font-variant-numeric:tabular-nums}
+.prog{height:6px;border-radius:999px;background:#252b3a;overflow:hidden}
+.prog i{display:block;height:100%;border-radius:999px;background:linear-gradient(90deg,var(--accent),var(--accent2));
+  transition:width .35s ease}
+
+/* 添加 */
+.add{display:flex;gap:8px}
+.add input{flex:1}
+.add button{padding:0 16px;font-weight:600;flex:0 0 auto}
+.add-hint{margin-top:8px;display:flex;justify-content:space-between;gap:8px;color:var(--faint);font-size:12px}
+.add-hint b{color:var(--accent);font-weight:600}
+
+/* 列表 */
+.group{margin:18px 1px 7px;font-size:12.5px;color:var(--dim);display:flex;justify-content:space-between;align-items:center}
+.group b{color:var(--faint);font-weight:400;font-variant-numeric:tabular-nums}
+.group .fold{font-style:normal;color:var(--faint);margin-left:3px;font-size:11px}
+.foldhdr{cursor:pointer;padding:7px 2px;margin-top:14px;-webkit-user-select:none;user-select:none}
+.task{position:relative;display:flex;align-items:flex-start;gap:11px;background:var(--card);
+  border:1px solid var(--line);border-radius:13px;padding:12px 13px;margin-bottom:8px;
+  transition:background .12s,transform .12s,border-color .12s;touch-action:manipulation}
+.task:active{background:var(--card2);transform:scale(.985)}
+.task.p1{box-shadow:inset 3px 0 0 #5b8def}
+.task.p2{box-shadow:inset 3px 0 0 #d9a03f}
+.task.p3{box-shadow:inset 3px 0 0 var(--accent)}
+.box{flex:0 0 21px;width:21px;height:21px;border-radius:50%;border:1.7px solid #4a5268;
+  display:flex;align-items:center;justify-content:center;font-size:13px;color:#fff;
+  transition:background .15s,border-color .15s,transform .15s}
+.task.on .box{background:var(--accent);border-color:var(--accent);transform:scale(.94)}
 .task.on .ttl{color:var(--faint);text-decoration:line-through}
 .tb{flex:1;min-width:0}
-.ttl{word-break:break-word;font-size:15px}
-.meta{color:var(--faint);font-size:12px;margin-top:3px}
-.add{display:flex;gap:8px;margin:4px 0 2px}
-.add input{flex:1}
+.ttl{word-break:break-word;font-size:15px;line-height:1.45}
+.meta{color:var(--faint);font-size:12px;margin-top:4px;display:flex;flex-wrap:wrap;gap:4px 6px;align-items:center}
+.tag{font-size:11px;color:#aab5cc;background:#232a39;border-radius:6px;padding:1px 7px}
+.doneby{color:var(--faint)}
+.empty{text-align:center;color:var(--faint);padding:28px 10px;font-size:13px;line-height:1.9}
+.empty b{display:block;font-size:26px;margin-bottom:6px;opacity:.7}
+.foot{text-align:center;color:var(--faint);font-size:11.5px;margin:22px 0 0;min-height:18px}
 .pill{font-size:12px;color:var(--dim);border:1px solid var(--line);border-radius:999px;padding:4px 10px;background:transparent}
 .pill.on{color:var(--accent);border-color:var(--accent);background:rgba(226,85,109,.13)}
-.foot{text-align:center;color:var(--faint);font-size:11.5px;margin:22px 0 0}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
 </head>
 <body>
@@ -64,8 +112,9 @@ button[disabled]{opacity:.5}
   'use strict';
 
   var K = { cfg:'tp.cfg', sess:'tp.sess', ws:'tp.ws' };
-  var S = { cfg:null, tok:'', rt:'', exp:0, uid:'', email:'', ws:null, tasks:[], busy:false,
-            err:'', note:'', addDate:'', loaded:false, timer:0 };
+  var S = { cfg:null, tok:'', rt:'', exp:0, uid:'', email:'', ws:null, tasks:[],
+            err:'', note:'', addDate:'', view:'today', doneOpen:false, stale:false, draft:'',
+            loaded:false, timer:0 };
 
   function $(s, r){ return (r||document).querySelector(s); }
   function load(k){ try { return JSON.parse(localStorage.getItem(k)||'null'); } catch(e){ return null; } }
@@ -88,6 +137,12 @@ button[disabled]{opacity:.5}
     var p = d.split('-');
     return parseInt(p[1],10) + '月' + parseInt(p[2],10) + '日 ' + weekday(d);
   }
+  function dateText(d){
+    var p = d.split('-');
+    return parseInt(p[1],10) + '月' + parseInt(p[2],10) + '日 ' + weekday(d);
+  }
+  function clock(){ var d = new Date(); return pad(d.getHours()) + ':' + pad(d.getMinutes()); }
+
   function newId(){
     if (window.crypto && crypto.randomUUID) return crypto.randomUUID().replace(/-/g,'');
     var h='0123456789abcdef', s='';
@@ -168,6 +223,7 @@ button[disabled]{opacity:.5}
     var s = load(K.sess);
     if (s) { S.tok=s.tok||''; S.rt=s.rt||''; S.exp=s.exp||0; S.uid=s.uid||''; S.email=s.email||''; }
     S.ws = load(K.ws) || null;
+    S.view = 'today'; S.doneOpen = false;
     S.addDate = shift(0);
   }
 
@@ -194,18 +250,37 @@ button[disabled]{opacity:.5}
 
   function loadTasks(){
     if (!S.ws) return Promise.resolve();
-    var q = '/rest/v1/tasks?workspace_id=eq.'+S.ws.id
-          + '&deleted_at=is.null'
-          + '&select=id,title,note,date,done,done_at,priority,tag,sort,project_id,rev,completed_by'
-          + '&order=date.asc,sort.asc&limit=2000';
-    return req(q).then(function(rows){ S.tasks = rows || []; S.loaded = true; });
+    var head = '/rest/v1/tasks?workspace_id=eq.'+S.ws.id + '&deleted_at=is.null';
+    var tail = '&select=id,title,note,date,done,done_at,priority,tag,sort,project_id,rev,completed_by'
+             + '&order=date.asc,sort.asc&limit=2000';
+    function get(extra){ return req(head + extra + tail); }
+    // 只拉共用中的任务；老库还没 shared 列时退回老查询，免得整页空白
+    return get('&shared=eq.true').catch(function(e){
+      if (e.status !== 400) throw e;
+      return get('');
+    }).then(function(rows){ S.tasks = rows || []; S.loaded = true; });
+  }
+
+  function taskSig(){
+    var a = [], i, t;
+    for (i=0;i<S.tasks.length;i++){
+      t = S.tasks[i];
+      a.push(t.id + ':' + (t.rev||0) + ':' + (t.done?1:0));
+    }
+    return a.join('|');
   }
 
   function sync(quiet){
-    if (!S.ws) { return Promise.resolve(); }
+    if (!S.ws) return Promise.resolve();
+    var before = taskSig();
     return loadTasks().then(function(){
       S.err = '';
-      if (!quiet) { S.note = '已同步 ' + new Date().toLocaleTimeString('zh-CN',{hour12:false}); render(); }
+      var typing = document.activeElement && document.activeElement.id === 'add-title';
+      if (taskSig() !== before || S.stale) {
+        if (!typing) { S.stale = false; render(); return; }
+        S.stale = true;
+      }
+      if (!quiet) { S.note = '已同步 ' + clock(); render(); }
     }).catch(function(e){
       if (e.status === 401) { logout(); return; }
       S.err = e.message;
@@ -213,9 +288,18 @@ button[disabled]{opacity:.5}
     });
   }
 
+  function paintTask(t){
+    var row = view.querySelector('.task[data-id="' + t.id + '"]');
+    if (!row) return;
+    if (t.done) row.classList.add('on'); else row.classList.remove('on');
+    var b = row.querySelector('.box');
+    if (b) b.textContent = t.done ? '✓' : '';
+  }
+
   function toggle(t){
-    if (S.busy) return;
-    S.busy = true;
+    if (t._busy) return;
+    t._busy = true;
+    var prev = { done:t.done, done_at:t.done_at, completed_by:t.completed_by, rev:t.rev };
     var done = !t.done;
     var body = {
       done: done,
@@ -223,28 +307,36 @@ button[disabled]{opacity:.5}
       completed_by: done ? (S.uid || null) : null,
       rev: (t.rev || 1) + 1
     };
+    t.done = done; t.done_at = body.done_at; t.completed_by = body.completed_by; t.rev = body.rev;
+    paintTask(t);                                   // 手指一抬就有反馈，不等网络
     req('/rest/v1/tasks?id=eq.'+encodeURIComponent(t.id), {
       method:'PATCH', body:body, headers:{ Prefer:'return=representation' }
     }).then(function(rows){
       if (rows && rows[0]) { for (var k in rows[0]) if (rows[0].hasOwnProperty(k)) t[k] = rows[0][k]; }
-      else { t.done = done; t.rev = body.rev; t.completed_by = body.completed_by; }
       S.err = '';
     }).catch(function(e){
       if (e.status === 401) { logout(); return; }
+      t.done = prev.done; t.done_at = prev.done_at;
+      t.completed_by = prev.completed_by; t.rev = prev.rev;
       S.err = e.message;
-    }).then(function(){ S.busy = false; render(); });
+    }).then(function(){
+      t._busy = false;
+      render();
+    });
   }
 
   function addTask(title, date){
     var t = { id:newId(), workspace_id:S.ws.id, title:title, note:'', date:date, done:false,
               priority:0, tag:'', sort:nextSort(date), project_id:'', rev:1 };
+    S.tasks.push(t);                                // 先画出来，网络在后头追
     return req('/rest/v1/tasks', {
       method:'POST', body:t, headers:{ Prefer:'return=representation' }
     }).then(function(rows){
-      if (rows && rows[0]) S.tasks.push(rows[0]);
+      if (rows && rows[0]) { for (var k in rows[0]) if (rows[0].hasOwnProperty(k)) t[k] = rows[0][k]; }
       S.err = '';
     }).catch(function(e){
       if (e.status === 401) { logout(); return; }
+      for (var i=0;i<S.tasks.length;i++) if (S.tasks[i] === t) { S.tasks.splice(i,1); break; }
       S.err = e.message;
     });
   }
@@ -368,63 +460,113 @@ button[disabled]{opacity:.5}
     };
   }
 
+  function segHtml(v, name, n){
+    return '<button data-view="' + v + '"' + (S.view === v ? ' class="on"' : '') + '>'
+      + name + '<b>' + n + '</b></button>';
+  }
+
+  function emptyHtml(){
+    if (S.view === 'tomorrow') return '<div class="empty"><b>☾</b>明天还没有安排</div>';
+    if (S.view === 'all') return '<div class="empty"><b>✓</b>这儿是空的</div>';
+    return '<div class="empty"><b>✓</b>今天没有待办<br>要么加一条，要么休息</div>';
+  }
+
   function renderList(){
     if (!S.loaded && !S.err) {
       view.innerHTML = '<div class="wrap"><div class="top"><h1>' + esc(S.ws.name || '我的计划')
         + '</h1></div><div class="card" style="text-align:center;color:var(--faint)">正在同步…</div></div>';
       return;
     }
+
     var today = ymd(new Date());
-    var over = [], todayList = [], later = {}, done = [];
+    var tom = shift(1);
+    S.addDate = S.view === 'tomorrow' ? tom : today;   // 跨过午夜也跟着走
+    var todayOpen = 0, tomOpen = 0, allOpen = 0, todayDone = 0, tomDone = 0;
+    var over = [], todayList = [], tomList = [], later = {}, doneAll = [], doneView = [];
     for (var i=0;i<S.tasks.length;i++){
       var t = S.tasks[i];
-      if (t.done) { done.push(t); continue; }
+      if (t.done){
+        doneAll.push(t);
+        if (t.date === today) { todayDone++; doneView.push(t); }
+        else if (t.date === tom) { tomDone++; if (S.view === 'tomorrow') doneView.push(t); }
+        continue;
+      }
+      allOpen++;
+      if (t.date === today) { todayOpen++; todayList.push(t); }
+      else if (t.date === tom) { tomOpen++; tomList.push(t); }
       if (t.date < today) over.push(t);
-      else if (t.date === today) todayList.push(t);
-      else (later[t.date] = later[t.date] || []).push(t);
+      if (t.date > today) (later[t.date] = later[t.date] || []).push(t);
     }
-    done.sort(function(a,b){ return (b.done_at||'') > (a.done_at||'') ? 1 : -1; });
+    if (S.view === 'tomorrow') {
+      doneView = [];
+      for (var d=0;d<S.tasks.length;d++) if (S.tasks[d].done && S.tasks[d].date === tom) doneView.push(S.tasks[d]);
+    } else if (S.view === 'all') {
+      doneView = doneAll;
+    }
+    doneView.sort(function(a,b){ return (b.done_at||'') > (a.done_at||'') ? 1 : -1; });
 
-    var h = '';
-    h += '<div class="wrap">';
+    var vTotal, vDone, vName;
+    if (S.view === 'today') { vTotal = todayOpen + todayDone; vDone = todayDone; vName = dateText(today); }
+    else if (S.view === 'tomorrow') { vTotal = tomOpen + tomDone; vDone = tomDone; vName = dateText(tom); }
+    else { vTotal = allOpen + doneAll.length; vDone = doneAll.length; vName = '全部计划'; }
+    var pct = vTotal ? Math.round(vDone * 100 / vTotal) : 0;
+
+    var h = '<div class="wrap">';
+    h += '<div class="sticky">';
     h += '<div class="top"><div style="min-width:0">'
       + '<h1>' + esc(S.ws.name || '我的计划') + '</h1>'
       + '<div class="faint" id="invite">邀请码 ' + esc(S.ws.invite || '') + ' · 点一下复制</div>'
-      + '</div><div class="row">'
+      + '</div><div class="act">'
       + '<button id="refresh" title="刷新">↻</button>'
       + '<button class="ghost" id="logout">退出</button>'
       + '</div></div>';
-
-    h += '<div class="card" style="padding:11px">'
-      + '<div class="add">'
-      + '<input id="add-title" placeholder="加一条，回车保存" autocomplete="off">'
-      + '<button class="primary" id="add-go">加</button>'
-      + '</div><div class="row" style="margin-top:9px">'
-      + '<button class="pill'+(S.addDate===shift(0)?' on':'')+'" data-day="0">今天</button>'
-      + '<button class="pill'+(S.addDate===shift(1)?' on':'')+'" data-day="1">明天</button>'
-      + '<span class="faint" id="add-hint" style="margin-left:auto">' + esc(label(S.addDate, today)) + '</span>'
+    h += '<div class="seg">'
+      + segHtml('today', '今天', todayOpen)
+      + segHtml('tomorrow', '明天', tomOpen)
+      + segHtml('all', '全部', allOpen)
       + '</div></div>';
 
-    if (over.length) h += groupHtml('已逾期', over.length) + over.map(rowHtml).join('');
-    if (todayList.length) h += groupHtml('今天', todayList.length) + todayList.map(rowHtml).join('');
-    var keys = Object.keys(later).sort();
-    for (var j=0;j<keys.length;j++){
-      h += groupHtml(label(keys[j], today), later[keys[j]].length) + later[keys[j]].map(rowHtml).join('');
-    }
-    if (!over.length && !todayList.length && !keys.length)
-      h += '<div class="card" style="text-align:center;color:var(--faint)">今天没有待办。要么加一条，要么休息。</div>';
+    h += '<div class="stat"><div class="line"><span>' + esc(vName) + '</span>'
+      + '<b>' + vDone + ' / ' + vTotal + '</b></div>'
+      + '<div class="prog"><i style="width:' + pct + '%"></i></div></div>';
 
-    if (done.length){
-      h += groupHtml('已完成', done.length, '▸');
-      h += '<div id="done-list" style="display:none">' + done.slice(0,60).map(rowHtml).join('') + '</div>';
+    h += '<div class="card" style="padding:11px"><div class="add">'
+      + '<input id="add-title" placeholder="加一条，回车保存" autocomplete="off" value="' + esc(S.draft) + '">'
+      + '<button class="primary" id="add-go">添加</button>'
+      + '</div><div class="add-hint"><span>加到 <b>' + esc(label(S.addDate, today)) + '</b></span>'
+      + '<span>' + esc(dateText(S.addDate)) + '</span></div></div>';
+
+    h += '<div id="list">';
+    if (S.view === 'today') {
+      if (over.length) h += groupHtml('已逾期', over.length) + over.map(rowHtml).join('');
+      h += groupHtml('今天', todayList.length) + (todayList.length ? todayList.map(rowHtml).join('') : emptyHtml());
+    } else if (S.view === 'tomorrow') {
+      h += groupHtml('明天', tomList.length) + (tomList.length ? tomList.map(rowHtml).join('') : emptyHtml());
+    } else {
+      if (over.length) h += groupHtml('已逾期', over.length) + over.map(rowHtml).join('');
+      if (todayList.length) h += groupHtml('今天', todayList.length) + todayList.map(rowHtml).join('');
+      var keys = Object.keys(later).sort();
+      for (var j=0;j<keys.length;j++){
+        h += groupHtml(label(keys[j], today), later[keys[j]].length) + later[keys[j]].map(rowHtml).join('');
+      }
+      if (!over.length && !todayList.length && !keys.length) h += emptyHtml();
+    }
+    h += '</div>';
+
+    if (doneView.length) {
+      h += '<div class="group foldhdr" id="done-head"><span>已完成 <i class="fold">'
+        + (S.doneOpen ? '▾' : '▸') + '</i></span><b>' + doneView.length + '</b></div>';
+      h += '<div id="done-list"' + (S.doneOpen ? '' : ' hidden') + '>'
+        + (S.doneOpen ? doneView.slice(0,60).map(rowHtml).join('') : '') + '</div>';
     }
 
-    h += '<div class="foot">' + (S.err ? '<span class="err">'+esc(S.err)+'</span>' : esc(S.note || '每 15 秒自动同步')) + '</div>';
+    h += '<div class="foot">' + (S.err ? '<span class="err">' + esc(S.err) + '</span>'
+      : esc(S.note || '每 15 秒自动同步')) + '</div>';
     h += '</div>';
 
     view.innerHTML = h;
 
-    $('#refresh').onclick = function(){ sync(false); };
+    $('#refresh').onclick = function(){ this.textContent = '…'; sync(false); };
     $('#logout').onclick = logout;
     $('#invite').onclick = function(){
       var code = S.ws.invite || '';
@@ -432,31 +574,49 @@ button[disabled]{opacity:.5}
       S.note = '邀请码已复制：' + code; render();
     };
     $('#add-go').onclick = submitAdd;
+    $('#add-title').oninput = function(){ S.draft = this.value; };
     $('#add-title').onkeydown = function(e){ if (e.key === 'Enter') submitAdd(); };
-    var pills = view.querySelectorAll('.pill');
-    for (var p=0;p<pills.length;p++) pills[p].onclick = function(){
-      S.addDate = shift(parseInt(this.getAttribute('data-day'),10)); render();
+    var segs = view.querySelectorAll('.seg button');
+    for (var p2=0;p2<segs.length;p2++) segs[p2].onclick = function(){
+      S.view = this.getAttribute('data-view');
+      S.note = '';
+      render();
+      window.scrollTo(0, 0);
     };
-    var g = $('#done-list');
-    if (g) {
-      var head = g.previousElementSibling;
-      head.style.cursor = 'pointer';
-      head.onclick = function(){
-        var open = g.style.display === 'none';
-        g.style.display = open ? '' : 'none';
-        var f = head.querySelector('.fold');
-        if (f) f.textContent = open ? '▾' : '▸';
-      };
+    var dh = $('#done-head');
+    if (dh) dh.onclick = function(){
+      S.doneOpen = !S.doneOpen;
+      var g = $('#done-list');
+      if (S.doneOpen && g && !g.innerHTML) g.innerHTML = doneView.slice(0,60).map(rowHtml).join('');
+      if (g) g.hidden = !S.doneOpen;
+      var f = dh.querySelector('.fold');
+      if (f) f.textContent = S.doneOpen ? '▾' : '▸';
+    };
+  }
+
+  function onViewClick(e){
+    var el = e.target, row = null;
+    while (el && el !== view) {
+      if (el.classList && el.classList.contains('task')) { row = el; break; }
+      el = el.parentNode;
     }
-    bindRows();
+    if (!row) return;
+    var id = row.getAttribute('data-id');
+    for (var i=0;i<S.tasks.length;i++) if (S.tasks[i].id === id) { toggle(S.tasks[i]); return; }
   }
 
   function submitAdd(){
     var box = $('#add-title');
-    var t = box.value.trim();
-    if (!t) return;
+    if (!box) return;
+    var text = box.value.trim();
+    if (!text) return;
     box.value = '';
-    addTask(t, S.addDate).then(function(){ render(); });
+    S.draft = '';
+    addTask(text, S.addDate);
+    S.note = '已加到' + label(S.addDate, ymd(new Date()));
+    render();
+    var again = $('#add-title');
+    if (again) again.focus();
   }
 
   function groupHtml(name, n, fold){
@@ -464,24 +624,19 @@ button[disabled]{opacity:.5}
   }
 
   function rowHtml(t){
-    var meta = [];
-    if (t.tag) meta.push(t.tag);
-    if (t.done) meta.push(t.completed_by ? (t.completed_by === S.uid ? '我完成的' : '对方完成的') : '已完成');
-    return '<div class="task' + (t.done?' on':'') + '" data-id="' + esc(t.id) + '">'
+    var cls = 'task' + (t.done ? ' on' : '');
+    if (t.priority) cls += ' p' + Math.min(3, t.priority);
+    var meta = '';
+    if (t.tag) meta += '<span class="tag">' + esc(t.tag) + '</span>';
+    if (t.done) {
+      var who = t.completed_by ? (t.completed_by === S.uid ? '我完成的' : '对方完成的') : '已完成';
+      meta += '<span class="doneby">' + who + '</span>';
+    }
+    return '<div class="' + cls + '" data-id="' + esc(t.id) + '">'
       + '<span class="box">' + (t.done ? '✓' : '') + '</span>'
       + '<div class="tb"><div class="ttl">' + esc(t.title) + '</div>'
-      + (meta.length ? '<div class="meta">' + esc(meta.join(' · ')) + '</div>' : '')
+      + (meta ? '<div class="meta">' + meta + '</div>' : '')
       + '</div></div>';
-  }
-
-  function bindRows(){
-    var rows = view.querySelectorAll('.task');
-    for (var i=0;i<rows.length;i++){
-      rows[i].onclick = function(){
-        var id = this.getAttribute('data-id');
-        for (var k=0;k<S.tasks.length;k++) if (S.tasks[k].id === id) { toggle(S.tasks[k]); return; }
-      };
-    }
   }
 
   function showErr(sel, text){
@@ -500,6 +655,11 @@ button[disabled]{opacity:.5}
 
   // ---------- 启动 ----------
   restore();
+  view = $('#view');
+  if (view) view.addEventListener('click', onViewClick, false);
+  document.addEventListener('visibilitychange', function(){
+    if (!document.hidden && S.tok && S.ws) sync(true);
+  });
   if (S.cfg && S.tok) {
     render();
     loadWs().then(function(){ if (S.ws) bootTasks(); else render(); })
